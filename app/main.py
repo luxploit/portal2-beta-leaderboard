@@ -481,6 +481,108 @@ def moderation(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@app.get("/moderation/runs/add", response_class=HTMLResponse)
+def add_run_as_moderator_form(request: Request, db: Session = Depends(get_db)):
+    require_moderator(request, db)
+    categories = db.scalars(
+        select(Category).order_by(Category.build_order, Category.display_order)
+    ).all()
+    return render_template(
+        "moderation_add_run.html",
+        template_context(request, db, categories=categories, values={}, errors=[]),
+    )
+
+
+@app.post("/moderation/runs/add", response_class=HTMLResponse)
+def add_run_as_moderator(
+    request: Request,
+    discord_id: str = Form(...),
+    temporary_display_name: str = Form(...),
+    category_id: int = Form(...),
+    run_time: str = Form(...),
+    video_url: str = Form(...),
+    notes: str = Form(""),
+    csrf_token: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    moderator = require_moderator(request, db)
+    verify_csrf(request, csrf_token)
+
+    clean_discord_id = discord_id.strip()
+    clean_display_name = temporary_display_name.strip()
+    clean_notes = notes.strip()
+    category = db.get(Category, category_id)
+    errors: list[str] = []
+
+    if not clean_discord_id.isdigit() or not 15 <= len(clean_discord_id) <= 25:
+        errors.append("Enter a valid numeric Discord user ID.")
+    if not clean_display_name:
+        errors.append("Enter a temporary display name.")
+    elif len(clean_display_name) > 80:
+        errors.append("Temporary display name must be 80 characters or fewer.")
+    if category is None:
+        errors.append("Choose a valid category.")
+    try:
+        time_ms = parse_time_to_ms(run_time)
+    except ValueError as exc:
+        time_ms = 0
+        errors.append(str(exc))
+    try:
+        clean_video_url = validate_video_url(video_url)
+    except ValueError as exc:
+        clean_video_url = video_url.strip()
+        errors.append(str(exc))
+    if len(clean_notes) > 2000:
+        errors.append("Notes must be 2,000 characters or fewer.")
+
+    if errors:
+        categories = db.scalars(
+            select(Category).order_by(Category.build_order, Category.display_order)
+        ).all()
+        return render_template(
+            "moderation_add_run.html",
+            template_context(
+                request,
+                db,
+                categories=categories,
+                values={
+                    "discord_id": discord_id,
+                    "temporary_display_name": temporary_display_name,
+                    "category_id": category_id,
+                    "run_time": run_time,
+                    "video_url": video_url,
+                    "notes": notes,
+                },
+                errors=errors,
+            ),
+            status_code=422,
+        )
+
+    runner = db.scalar(select(User).where(User.discord_id == clean_discord_id))
+    if runner is None:
+        runner = User(discord_id=clean_discord_id, username=clean_display_name)
+        db.add(runner)
+        db.flush()
+    elif runner.last_login_at is None:
+        runner.username = clean_display_name
+
+    run = Run(
+        user_id=runner.id,
+        category_id=category_id,
+        time_ms=time_ms,
+        video_url=clean_video_url,
+        notes=clean_notes,
+        status="approved",
+        reviewed_at=utcnow(),
+        reviewed_by_user_id=moderator.id,
+    )
+    db.add(run)
+    db.commit()
+    db.refresh(run)
+    flash(request, f"Run #{run.id} added for {runner.display_name}.", "success")
+    return RedirectResponse(f"/runs/{run.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
 def _get_pending_run(db: Session, run_id: int) -> Run:
     run = db.get(Run, run_id)
     if run is None:

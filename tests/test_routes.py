@@ -1,3 +1,5 @@
+import base64
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -8,9 +10,14 @@ os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB.as_posix()}"
 os.environ["SESSION_SECRET"] = "route-test-secret"
 
 from fastapi.testclient import TestClient
+from itsdangerous import TimestampSigner
+from sqlalchemy import func, select
+from sqlalchemy.orm import joinedload
 
-from app.database import engine
+from app.auth import upsert_discord_user
+from app.database import SessionLocal, engine
 from app.main import app
+from app.models import Category, Run, User
 
 
 def test_public_pages_render_with_current_starlette():
@@ -58,6 +65,81 @@ def test_protected_page_uses_html_error_template_when_signed_out():
         response = client.get("/submit")
         assert response.status_code == 401
         assert "Sign in with Discord" in response.text
+
+
+def test_moderator_can_add_run_for_placeholder_discord_user():
+    csrf_token = "test-csrf-token"
+    discord_id = "123456789012345678"
+
+    with TestClient(app) as client:
+        with SessionLocal() as db:
+            moderator = User(
+                discord_id="987654321098765432",
+                username="Moderator",
+                is_moderator=True,
+            )
+            db.add(moderator)
+            db.commit()
+            db.refresh(moderator)
+            moderator_id = moderator.id
+            category_id = db.scalar(
+                select(Category.id).where(Category.slug == "2009-no-major-exploits")
+            )
+
+        session_data = base64.b64encode(
+            json.dumps({"user_id": moderator_id, "csrf_token": csrf_token}).encode()
+        )
+        session_cookie = TimestampSigner("route-test-secret").sign(session_data).decode()
+        client.cookies.set("p2runs_session", session_cookie)
+
+        moderation_response = client.get("/moderation")
+        assert 'href="/moderation/runs/add"' in moderation_response.text
+        assert 'name="temporary_display_name"' not in moderation_response.text
+
+        form_response = client.get("/moderation/runs/add")
+        assert form_response.status_code == 200
+        assert 'name="temporary_display_name"' in form_response.text
+
+        response = client.post(
+            "/moderation/runs/add",
+            data={
+                "discord_id": discord_id,
+                "temporary_display_name": "Temporary Runner",
+                "category_id": category_id,
+                "run_time": "1:23.456",
+                "video_url": "https://youtu.be/example",
+                "notes": "Imported by a moderator.",
+                "csrf_token": csrf_token,
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+
+    with SessionLocal() as db:
+        runner = db.scalar(select(User).where(User.discord_id == discord_id))
+        assert runner is not None
+        assert runner.display_name == "Temporary Runner"
+        run = db.scalar(
+            select(Run)
+            .options(joinedload(Run.runner))
+            .where(Run.user_id == runner.id)
+        )
+        assert run is not None
+        assert run.status == "approved"
+        assert run.reviewed_by_user_id == moderator_id
+
+        upsert_discord_user(
+            db,
+            {
+                "id": discord_id,
+                "username": "current_username",
+                "global_name": "Current Discord Name",
+                "avatar": None,
+            },
+        )
+        assert db.scalar(select(func.count(User.id)).where(User.discord_id == discord_id)) == 1
+        db.refresh(run)
+        assert run.runner.display_name == "Current Discord Name"
 
 
 def teardown_module():

@@ -1,7 +1,10 @@
 {% extends "base.html" %}
 {% block title %}Moderation · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="title-row"><h1>Moderation</h1></div>
+<div class="title-row">
+  <h1>Moderation</h1>
+  <a href="/moderation/runs/add">Add run manually</a>
+</div>
 {% if pending_runs %}
 <div class="review-list">
 {% for run in pending_runs %}
