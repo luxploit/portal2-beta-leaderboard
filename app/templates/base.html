@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="en">
+<html lang="en" class="{% block page_class %}{% endblock %}">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -18,7 +18,7 @@
           <a href="/submit">Submit</a>
           {% if is_moderator %}<a href="/moderation">Moderation</a>{% endif %}
           {% if is_owner %}<a href="/owner/audit-log">Audit log</a><a href="/owner/mods">Mods</a>{% endif %}
-          <a class="user-link" href="/me" title="My runs">
+          <a class="user-link" href="/users/{{ current_user.discord_id }}" title="My profile">
             <img class="user-avatar" src="{{ current_user_avatar_url }}" alt="" width="24" height="24">
             <span>{{ current_user.display_name }}</span>
           </a>

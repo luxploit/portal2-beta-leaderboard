@@ -11,7 +11,7 @@
 <dl class="details">
   <div><dt>Build</dt><dd>{{ run.category.build_name }}</dd></div>
   <div><dt>Category</dt><dd><a href="/category/{{ run.category.slug }}">{{ run.category.display_name }}</a></dd></div>
-  <div><dt>Runner</dt><dd>{{ run.runner.display_name }}</dd></div>
+  <div><dt>Runner</dt><dd><a href="/users/{{ run.runner.discord_id }}">{{ run.runner.display_name }}</a></dd></div>
   <div><dt>Submitted</dt><dd>{{ run.submitted_at.strftime('%Y-%m-%d %H:%M UTC') }}</dd></div>
   {% if run.reviewed_at %}<div><dt>Reviewed</dt><dd>{{ run.reviewed_at.strftime('%Y-%m-%d %H:%M UTC') }}{% if run.reviewed_by %} by {{ run.reviewed_by.display_name }}{% endif %}</dd></div>{% endif %}
 </dl>

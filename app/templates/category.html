@@ -14,7 +14,7 @@
     {% for run in runs %}
       <tr>
         <td>{{ loop.index|ordinal }}</td>
-        <td>{{ run.runner.display_name }}</td>
+        <td><a href="/users/{{ run.runner.discord_id }}">{{ run.runner.display_name }}</a></td>
         <td class="time"><a href="/runs/{{ run.id }}">{{ run.time_ms|runtime }}</a></td>
         <td>{{ run.submitted_at.strftime('%Y-%m-%d') }}</td>
         <td><a href="{{ run.video_url }}" target="_blank" rel="noopener noreferrer">Video</a></td>

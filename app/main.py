@@ -27,13 +27,26 @@ from .auth import (
 )
 from .config import settings
 from .database import Base, SessionLocal, engine, get_db
-from .models import AuditLog, Category, Run, User, utcnow
+from .models import AuditLog, Category, Run, User, UserProfile, utcnow
 from .security import ensure_csrf_token, verify_csrf
 from .turnstile import turnstile_enabled, verify_turnstile
 from .utils import format_time, ordinal, parse_time_to_ms, validate_video_url
 
 BASE_DIR = Path(__file__).resolve().parent
 RULES_DIR = BASE_DIR.parent / "rules"
+PROFILE_COLORS = [
+    {"value": "slate", "label": "Slate"},
+    {"value": "blue", "label": "Blue"},
+    {"value": "green", "label": "Green"},
+    {"value": "purple", "label": "Purple"},
+    {"value": "rust", "label": "Rust"},
+    {"value": "teal", "label": "Teal"},
+    {"value": "rose", "label": "Rose"},
+    {"value": "olive", "label": "Olive"},
+    {"value": "sand", "label": "Sand"},
+    {"value": "charcoal", "label": "Charcoal"},
+]
+PROFILE_COLOR_VALUES = {color["value"] for color in PROFILE_COLORS}
 
 BUILD_SEED = [
     {
@@ -515,15 +528,106 @@ def submit_run(
 
 
 @app.get("/me", response_class=HTMLResponse)
-def my_runs(request: Request, db: Session = Depends(get_db)):
+def own_profile_redirect(request: Request, db: Session = Depends(get_db)):
     user = require_user(request, db)
+    return RedirectResponse(f"/users/{user.discord_id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
+@app.get("/users/{discord_id}", response_class=HTMLResponse)
+def user_profile(discord_id: str, request: Request, db: Session = Depends(get_db)):
+    user = db.scalar(
+        select(User)
+        .options(joinedload(User.profile))
+        .where(User.discord_id == discord_id)
+    )
+    if user is None:
+        raise HTTPException(status_code=404, detail="Runner not found.")
+    current_user = get_current_user(request, db)
+    own_profile = bool(current_user and current_user.id == user.id)
+    run_query = select(Run).options(joinedload(Run.category)).where(Run.user_id == user.id)
+    if not own_profile:
+        run_query = run_query.where(Run.status == "approved")
     runs = db.scalars(
-        select(Run)
-        .options(joinedload(Run.category))
-        .where(Run.user_id == user.id)
-        .order_by(Run.submitted_at.desc())
+        run_query.order_by(Run.submitted_at.desc())
     ).all()
-    return render_template("my_runs.html", template_context(request, db, runs=runs))
+    color = user.profile.background_color if user.profile else "slate"
+    if color not in PROFILE_COLOR_VALUES:
+        color = "slate"
+    return render_template(
+        "user_profile.html",
+        template_context(
+            request,
+            db,
+            profile_user=user,
+            profile=user.profile,
+            profile_color=color,
+            profile_avatar_url=discord_avatar_url(user),
+            profile_is_moderator=is_moderator(user),
+            own_profile=own_profile,
+            runs=runs,
+        ),
+    )
+
+
+@app.get("/me/profile", response_class=HTMLResponse)
+def edit_own_profile_form(request: Request, db: Session = Depends(get_db)):
+    user = require_user(request, db)
+    profile = db.get(UserProfile, user.id)
+    return render_template(
+        "edit_profile.html",
+        template_context(
+            request,
+            db,
+            profile=profile,
+            colors=PROFILE_COLORS,
+            values={
+                "bio": profile.bio if profile else "",
+                "background_color": profile.background_color if profile else "slate",
+            },
+            errors=[],
+        ),
+    )
+
+
+@app.post("/me/profile", response_class=HTMLResponse)
+def edit_own_profile(
+    request: Request,
+    bio: str = Form(""),
+    background_color: str = Form(...),
+    csrf_token: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    user = require_user(request, db)
+    verify_csrf(request, csrf_token)
+    clean_bio = bio.strip()
+    errors: list[str] = []
+    if len(clean_bio) > 500:
+        errors.append("Bio must be 500 characters or fewer.")
+    if background_color not in PROFILE_COLOR_VALUES:
+        errors.append("Choose a valid background color.")
+    if errors:
+        return render_template(
+            "edit_profile.html",
+            template_context(
+                request,
+                db,
+                profile=db.get(UserProfile, user.id),
+                colors=PROFILE_COLORS,
+                values={"bio": bio, "background_color": background_color},
+                errors=errors,
+            ),
+            status_code=422,
+        )
+
+    profile = db.get(UserProfile, user.id)
+    if profile is None:
+        profile = UserProfile(user_id=user.id)
+        db.add(profile)
+    profile.bio = clean_bio
+    profile.background_color = background_color
+    db.commit()
+    flash(request, "Profile updated.", "success")
+    return RedirectResponse(f"/users/{user.discord_id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)

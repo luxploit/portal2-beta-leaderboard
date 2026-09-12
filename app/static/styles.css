@@ -49,6 +49,7 @@ textarea {
 }
 
 .site-header {
+  background: var(--bg);
   border-bottom: 1px solid var(--border);
 }
 
@@ -102,6 +103,129 @@ nav a,
   height: 24px;
   border-radius: 50%;
   object-fit: cover;
+}
+
+.profile-header {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.profile-color-slate {
+  background: #141519;
+}
+
+.profile-color-blue {
+  background: #11161d;
+}
+
+.profile-color-green {
+  background: #111914;
+}
+
+.profile-color-purple {
+  background: #17131c;
+}
+
+.profile-color-rust {
+  background: #1b1412;
+}
+
+.profile-color-teal {
+  background: #111819;
+}
+
+.profile-color-rose {
+  background: #1b1317;
+}
+
+.profile-color-olive {
+  background: #171811;
+}
+
+.profile-color-sand {
+  background: #191711;
+}
+
+.profile-color-charcoal {
+  background: #111214;
+}
+
+.profile-avatar {
+  flex: 0 0 auto;
+  display: block;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+}
+
+.profile-header h1 {
+  margin: 0;
+}
+
+.moderator-badge {
+  display: inline-block;
+  margin-top: 8px;
+  padding: 2px 8px;
+  border: 1px solid var(--link);
+  border-radius: 3px;
+  color: var(--link);
+  font-size: 14px;
+}
+
+.profile-bio {
+  max-width: 580px;
+  margin: 12px 0 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.profile-edit-link {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.profile-runs-title {
+  margin: 32px 0 14px;
+}
+
+.color-picker {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.color-picker legend {
+  margin-bottom: 8px;
+}
+
+.color-options {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(90px, 1fr));
+  gap: 8px;
+}
+
+.form-panel .color-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 54px;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.color-option input {
+  width: auto;
+  margin: 0;
+}
+
+.color-option:has(input:checked) {
+  outline: 2px solid var(--text);
+  outline-offset: 1px;
 }
 
 .inline-form {
@@ -581,5 +705,18 @@ textarea {
   .details>div {
     grid-template-columns: 1fr;
     gap: 2px;
+  }
+
+  .profile-header {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+
+  .profile-edit-link {
+    margin-left: 0;
+  }
+
+  .color-options {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }

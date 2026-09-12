@@ -29,10 +29,29 @@ class User(Base):
         foreign_keys="Run.user_id",
         cascade="all, delete-orphan",
     )
+    profile: Mapped["UserProfile | None"] = relationship(
+        back_populates="user",
+        cascade="all, delete-orphan",
+        uselist=False,
+    )
 
     @property
     def display_name(self) -> str:
         return self.global_name or self.username or self.discord_id
+
+
+class UserProfile(Base):
+    __tablename__ = "user_profiles"
+
+    user_id: Mapped[int] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    bio: Mapped[str] = mapped_column(Text, default="")
+    background_color: Mapped[str] = mapped_column(String(20), default="slate")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
+
+    user: Mapped[User] = relationship(back_populates="profile")
 
 
 class Category(Base):

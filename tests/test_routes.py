@@ -21,7 +21,7 @@ from app.auth import upsert_discord_user
 from app.database import SessionLocal, engine
 import app.main as main_module
 from app.main import app
-from app.models import AuditLog, Category, Run, User, utcnow
+from app.models import AuditLog, Category, Run, User, UserProfile, utcnow
 
 
 def test_public_pages_render_with_current_starlette():
@@ -200,6 +200,74 @@ def test_regular_submission_requires_turnstile(monkeypatch):
         run = db.scalar(select(Run).where(Run.user_id == user_id))
         assert run is not None
         assert run.status == "pending"
+
+
+def test_user_can_edit_public_profile_with_preset_color():
+    csrf_token = "profile-csrf"
+    with TestClient(app) as client:
+        with SessionLocal() as db:
+            user = User(
+                discord_id="444444444444444444",
+                username="profile_runner",
+                global_name="Profile Runner",
+                is_moderator=True,
+                last_login_at=utcnow(),
+            )
+            db.add(user)
+            db.commit()
+            db.refresh(user)
+            user_id = user.id
+
+        session_data = base64.b64encode(
+            json.dumps({"user_id": user_id, "csrf_token": csrf_token}).encode()
+        )
+        session_cookie = TimestampSigner("route-test-secret").sign(session_data).decode()
+        client.cookies.set("p2runs_session", session_cookie)
+
+        own_page = client.get("/users/444444444444444444")
+        assert 'href="/users/444444444444444444" title="My profile"' in own_page.text
+        legacy_response = client.get("/me", follow_redirects=False)
+        assert legacy_response.status_code == 303
+        assert legacy_response.headers["location"] == "/users/444444444444444444"
+
+        invalid_response = client.post(
+            "/me/profile",
+            data={
+                "bio": "Runner bio",
+                "background_color": "url(javascript:bad)",
+                "csrf_token": csrf_token,
+            },
+        )
+        assert invalid_response.status_code == 422
+
+        response = client.post(
+            "/me/profile",
+            data={
+                "bio": "Runner bio <script>alert(1)</script>",
+                "background_color": "purple",
+                "csrf_token": csrf_token,
+            },
+            follow_redirects=False,
+        )
+        assert response.status_code == 303
+        assert response.headers["location"] == "/users/444444444444444444"
+
+        client.cookies.clear()
+        public_response = client.get("/users/444444444444444444")
+        assert public_response.status_code == 200
+        assert '<html lang="en" class="profile-color-purple">' in public_response.text
+        assert '<h2>About me</h2>' in public_response.text
+        assert 'class="moderator-badge">Moderator' in public_response.text
+        assert '<meta name="twitter:card" content="summary">' in public_response.text
+        assert '<meta property="og:image"' in public_response.text
+        assert client.get(f"/users/{user_id}").status_code == 404
+        assert "Runner bio &lt;script&gt;alert(1)&lt;/script&gt;" in public_response.text
+        assert '<meta property="og:title"' in public_response.text
+
+    with SessionLocal() as db:
+        profile = db.get(UserProfile, user_id)
+        assert profile is not None
+        assert profile.background_color == "purple"
 
 
 def test_moderator_can_add_run_for_placeholder_discord_user():
