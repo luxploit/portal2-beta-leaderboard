@@ -117,6 +117,7 @@ nav a,
 }
 
 .link-button:hover {
+  background: transparent;
   color: var(--text);
   text-decoration: underline;
 }
