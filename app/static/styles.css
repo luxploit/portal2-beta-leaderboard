@@ -192,8 +192,11 @@ nav a,
 .profile-bio {
   max-width: 580px;
   margin: 12px 0 0;
-  white-space: pre-wrap;
   overflow-wrap: anywhere;
+}
+
+.profile-bio p {
+  margin: 0 0 12px;
 }
 
 .profile-edit-link {

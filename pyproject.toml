@@ -13,6 +13,8 @@ dependencies = [
     "itsdangerous>=2.2,<3",
     "python-dotenv>=1.0,<2",
     "markdown>=3.8,<4",
+    "mistune>=3,<4",
+    "nh3>=0.3,<1",
 ]
 
 [dependency-groups]

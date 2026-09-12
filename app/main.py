@@ -30,6 +30,7 @@ from .config import settings
 from .database import Base, SessionLocal, engine, get_db
 from .models import AuditLog, Category, Run, User, UserProfile, utcnow
 from .notifications import notify_moderation
+from .bio import render_bio
 from .security import ensure_csrf_token, verify_csrf
 from .turnstile import turnstile_enabled, verify_turnstile
 from .utils import format_time, ordinal, parse_time_to_ms, validate_video_url
@@ -151,6 +152,7 @@ app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.filters["runtime"] = format_time
 templates.env.filters["ordinal"] = ordinal
+templates.env.filters["bio_markdown"] = render_bio
 
 
 def render_template(name: str, context: dict, *, status_code: int = 200):

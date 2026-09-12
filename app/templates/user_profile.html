@@ -19,7 +19,7 @@
 </section>
 
 <h2>About me</h2>
-{% if profile and profile.bio %}<p class="profile-bio">{{ profile.bio }}</p>{% else %}<p class="muted">No bio yet.</p>{% endif %}
+{% if profile and profile.bio %}<div class="profile-bio">{{ profile.bio|bio_markdown }}</div>{% else %}<p class="muted">No bio yet.</p>{% endif %}
 
 <div class="profile-runs-title"><h2>Runs</h2></div>
 {% if runs %}
