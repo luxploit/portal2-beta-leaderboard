@@ -1,0 +1,12 @@
+services:
+  leaderboard:
+    image: ghcr.io/nikolan123/portal2-beta-leaderboard:latest
+    pull_policy: always
+    restart: unless-stopped
+    init: true
+    env_file:
+      - stack.env
+    ports:
+      - "${APP_PORT:-8000}:8000"
+    volumes:
+      - "${DATA_PATH:-./data}:/app/data"
