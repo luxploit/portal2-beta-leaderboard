@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import sqlite3
+from hashlib import sha256
 import tempfile
 import time
 from contextlib import asynccontextmanager, closing
@@ -33,6 +34,7 @@ from .turnstile import turnstile_enabled, verify_turnstile
 from .utils import format_time, ordinal, parse_time_to_ms, validate_video_url
 
 BASE_DIR = Path(__file__).resolve().parent
+CSS_VERSION = sha256((BASE_DIR / "static" / "styles.css").read_bytes()).hexdigest()[:16]
 RULES_DIR = BASE_DIR.parent / "rules"
 PROFILE_COLORS = [
     {"value": "slate", "label": "Slate"},
@@ -223,6 +225,7 @@ def template_context(request: Request, db: Session, **extra) -> dict:
     return {
         "request": request,
         "app_name": settings.app_name,
+        "css_version": CSS_VERSION,
         "current_user": current_user,
         "current_user_avatar_url": discord_avatar_url(current_user),
         "is_owner": is_owner(current_user),

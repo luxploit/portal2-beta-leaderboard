@@ -31,6 +31,9 @@ def test_public_pages_render_with_current_starlette():
         assert "text/html" in response.headers["content-type"]
         assert "Portal 2" in response.text
         assert '<meta property="og:title"' in response.text
+        assert f'styles.css?v={main_module.CSS_VERSION}' in response.text
+        css_response = client.get(f"/static/styles.css?v={main_module.CSS_VERSION}")
+        assert css_response.status_code == 200
 
 
 def test_category_rules_are_rendered_from_markdown(monkeypatch, tmp_path):
