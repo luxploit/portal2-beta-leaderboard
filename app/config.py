@@ -23,6 +23,7 @@ class Settings:
     cookie_secure: bool
     turnstile_site_key: str
     turnstile_secret_key: str
+    discord_moderation_webhook_url: str = ""
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -52,6 +53,7 @@ def load_settings() -> Settings:
         cookie_secure=_env_bool("COOKIE_SECURE", False),
         turnstile_site_key=os.getenv("TURNSTILE_SITE_KEY", ""),
         turnstile_secret_key=os.getenv("TURNSTILE_SECRET_KEY", ""),
+        discord_moderation_webhook_url=os.getenv("DISCORD_MODERATION_WEBHOOK_URL", ""),
     )
 
 

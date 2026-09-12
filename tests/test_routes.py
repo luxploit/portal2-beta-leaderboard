@@ -1,16 +1,6 @@
 import base64
 import json
 import os
-import tempfile
-from pathlib import Path
-
-TEST_DB = Path(tempfile.gettempdir()) / "portal2_runs_route_tests.db"
-TEST_DB.unlink(missing_ok=True)
-os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB.as_posix()}"
-os.environ["SESSION_SECRET"] = "route-test-secret"
-os.environ["OWNER_DISCORD_ID"] = "111111111111111111"
-os.environ["TURNSTILE_SITE_KEY"] = ""
-os.environ["TURNSTILE_SECRET_KEY"] = ""
 
 from fastapi.testclient import TestClient
 from itsdangerous import TimestampSigner
@@ -464,8 +454,3 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
         assert db.scalar(select(func.count(User.id)).where(User.discord_id == discord_id)) == 1
         db.refresh(run)
         assert run.runner.display_name == "Current Discord Name"
-
-
-def teardown_module():
-    engine.dispose()
-    TEST_DB.unlink(missing_ok=True)

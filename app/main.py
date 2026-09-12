@@ -9,7 +9,7 @@ from datetime import datetime
 from pathlib import Path
 
 import markdown
-from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
+from fastapi import BackgroundTasks, Depends, FastAPI, Form, HTTPException, Request, status
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -29,6 +29,7 @@ from .auth import (
 from .config import settings
 from .database import Base, SessionLocal, engine, get_db
 from .models import AuditLog, Category, Run, User, UserProfile, utcnow
+from .notifications import notify_moderation
 from .security import ensure_csrf_token, verify_csrf
 from .turnstile import turnstile_enabled, verify_turnstile
 from .utils import format_time, ordinal, parse_time_to_ms, validate_video_url
@@ -477,6 +478,7 @@ def submit_form(request: Request, db: Session = Depends(get_db)):
 @app.post("/submit", response_class=HTMLResponse)
 def submit_run(
     request: Request,
+    background_tasks: BackgroundTasks,
     category_id: int = Form(...),
     run_time: str = Form(...),
     video_url: str = Form(...),
@@ -544,6 +546,10 @@ def submit_run(
     db.commit()
     db.refresh(run)
     flash(request, "Run submitted for moderator review.", "success")
+    background_tasks.add_task(
+        notify_moderation, run.id, user.display_name,
+        f"{category.build_name} · {category.display_name}", run.time_ms,
+    )
     return RedirectResponse(f"/runs/{run.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -773,6 +779,7 @@ def edit_run_as_moderator_form(
 def edit_run_as_moderator(
     run_id: int,
     request: Request,
+    background_tasks: BackgroundTasks,
     discord_id: str = Form(...),
     temporary_display_name: str = Form(...),
     category_id: int = Form(...),
@@ -899,6 +906,11 @@ def edit_run_as_moderator(
     else:
         flash(request, f"No changes made to run #{run.id}.", "info")
     db.commit()
+    if changes and run.status == "pending":
+        background_tasks.add_task(
+            notify_moderation, run.id, runner.display_name,
+            f"{category.build_name} · {category.display_name}", run.time_ms, True,
+        )
     return RedirectResponse(f"/runs/{run.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
