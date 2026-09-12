@@ -375,6 +375,19 @@ button.danger:hover {
   max-width: 620px;
 }
 
+.verification-panel {
+  max-width: 420px;
+}
+
+.verification-panel > p {
+  margin: 10px 0 22px;
+}
+
+.verification-form {
+  display: grid;
+  gap: 18px;
+}
+
 .form-panel {
   display: grid;
   gap: 16px;

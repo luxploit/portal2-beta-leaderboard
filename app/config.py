@@ -21,6 +21,8 @@ class Settings:
     session_secret: str
     database_url: str
     cookie_secure: bool
+    turnstile_site_key: str
+    turnstile_secret_key: str
 
 
 def _env_bool(name: str, default: bool = False) -> bool:
@@ -48,6 +50,8 @@ def load_settings() -> Settings:
         session_secret=os.getenv("SESSION_SECRET", "dev-only-change-me"),
         database_url=database_url,
         cookie_secure=_env_bool("COOKIE_SECURE", False),
+        turnstile_site_key=os.getenv("TURNSTILE_SITE_KEY", ""),
+        turnstile_secret_key=os.getenv("TURNSTILE_SECRET_KEY", ""),
     )
 
 

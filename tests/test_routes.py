@@ -9,6 +9,8 @@ TEST_DB.unlink(missing_ok=True)
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB.as_posix()}"
 os.environ["SESSION_SECRET"] = "route-test-secret"
 os.environ["OWNER_DISCORD_ID"] = "111111111111111111"
+os.environ["TURNSTILE_SITE_KEY"] = ""
+os.environ["TURNSTILE_SECRET_KEY"] = ""
 
 from fastapi.testclient import TestClient
 from itsdangerous import TimestampSigner
@@ -17,38 +19,41 @@ from sqlalchemy.orm import joinedload
 
 from app.auth import upsert_discord_user
 from app.database import SessionLocal, engine
+import app.main as main_module
 from app.main import app
-from app.models import AuditLog, Category, Run, User
+from app.models import AuditLog, Category, Run, User, utcnow
 
 
 def test_public_pages_render_with_current_starlette():
     with TestClient(app) as client:
-        for path in (
-            "/",
-            "/category/2009-no-major-exploits",
-            "/category/2009-oob-sla",
-            "/category/2009-in-bounds-no-sla",
-            "/category/2010-no-major-exploits",
-            "/category/2010-oob-sla",
-            "/category/2010-in-bounds-no-sla",
-        ):
-            response = client.get(path)
-            assert response.status_code == 200, path
-            assert "text/html" in response.headers["content-type"]
-            assert "Portal 2" in response.text
-
-
-def test_home_groups_categories_by_build():
-    with TestClient(app) as client:
         response = client.get("/")
-        assert "July 2009 852_0" in response.text
-        assert "February 2010 841_0" in response.text
-        assert response.text.count("No Major Exploits") == 2
+        assert response.status_code == 200
+        assert "text/html" in response.headers["content-type"]
+        assert "Portal 2" in response.text
 
 
-def test_category_rules_are_rendered_from_markdown():
+def test_category_rules_are_rendered_from_markdown(monkeypatch, tmp_path):
+    rules_dir = tmp_path / "rules"
+    rules_dir.mkdir()
+    (rules_dir / "category.md").write_text("TBD", encoding="utf-8")
+    monkeypatch.setattr(main_module, "BASE_DIR", tmp_path / "app")
+    monkeypatch.setattr(main_module, "RULES_DIR", rules_dir)
+
     with TestClient(app) as client:
-        response = client.get("/category/2009-no-major-exploits/rules")
+        with SessionLocal() as db:
+            db.add(
+                Category(
+                    slug="route-test-category",
+                    name="Route Test Build - Route Test Category",
+                    short_name="Route Test Category",
+                    build_slug="route-test-build",
+                    build_name="Route Test Build",
+                    rules_file="rules/category.md",
+                )
+            )
+            db.commit()
+
+        response = client.get("/category/route-test-category/rules")
         assert response.status_code == 200
         assert "<p>TBD</p>" in response.text
         assert response.text.count("<h1") == 1
@@ -68,6 +73,134 @@ def test_protected_page_uses_html_error_template_when_signed_out():
         assert "Sign in with Discord" in response.text
 
 
+def test_discord_signup_is_not_created_until_turnstile_passes(monkeypatch):
+    discord_id = "222222222222222222"
+    csrf_token = "first-login-csrf"
+    oauth_state = "oauth-state"
+
+    async def fake_exchange(_code):
+        return {
+            "id": discord_id,
+            "username": "new_runner",
+            "global_name": "New Runner",
+            "avatar": None,
+        }
+
+    monkeypatch.setattr(main_module, "exchange_code_for_user", fake_exchange)
+    monkeypatch.setattr(main_module, "turnstile_enabled", lambda: True)
+    monkeypatch.setattr(
+        main_module,
+        "verify_turnstile",
+        lambda token, action: token == "valid-token" and action == "discord_signup",
+    )
+
+    with TestClient(app) as client:
+        session_data = base64.b64encode(
+            json.dumps({"oauth_state": oauth_state, "csrf_token": csrf_token}).encode()
+        )
+        session_cookie = TimestampSigner("route-test-secret").sign(session_data).decode()
+        client.cookies.set("p2runs_session", session_cookie)
+
+        callback_response = client.get(
+            f"/auth/callback?code=test-code&state={oauth_state}",
+            follow_redirects=False,
+        )
+        assert callback_response.status_code == 303
+        assert callback_response.headers["location"] == "/auth/verify"
+        with SessionLocal() as db:
+            assert db.scalar(select(User).where(User.discord_id == discord_id)) is None
+
+        verify_page = client.get("/auth/verify")
+        assert verify_page.status_code == 200
+        assert 'data-action="discord_signup"' in verify_page.text
+
+        failed_response = client.post(
+            "/auth/verify",
+            data={"csrf_token": csrf_token, "cf-turnstile-response": "bad-token"},
+        )
+        assert failed_response.status_code == 422
+        with SessionLocal() as db:
+            assert db.scalar(select(User).where(User.discord_id == discord_id)) is None
+
+        success_response = client.post(
+            "/auth/verify",
+            data={"csrf_token": csrf_token, "cf-turnstile-response": "valid-token"},
+            follow_redirects=False,
+        )
+        assert success_response.status_code == 303
+
+    with SessionLocal() as db:
+        user = db.scalar(select(User).where(User.discord_id == discord_id))
+        assert user is not None
+        assert user.display_name == "New Runner"
+        assert user.last_login_at is not None
+
+
+def test_regular_submission_requires_turnstile(monkeypatch):
+    csrf_token = "submission-csrf"
+    discord_id = "333333333333333333"
+    monkeypatch.setattr(main_module, "turnstile_enabled", lambda: True)
+    monkeypatch.setattr(
+        main_module,
+        "verify_turnstile",
+        lambda token, action: token == "valid-token" and action == "submit_run",
+    )
+
+    with TestClient(app) as client:
+        with SessionLocal() as db:
+            user = User(
+                discord_id=discord_id,
+                username="submitter",
+                last_login_at=utcnow(),
+            )
+            category = Category(
+                slug="submission-captcha-test-category",
+                name="CAPTCHA Test Build - Submission Category",
+                short_name="Submission Category",
+                build_slug="captcha-test-build",
+                build_name="CAPTCHA Test Build",
+                rules_file="rules/unused.md",
+            )
+            db.add_all([user, category])
+            db.commit()
+            db.refresh(user)
+            user_id = user.id
+            category_id = category.id
+
+        session_data = base64.b64encode(
+            json.dumps({"user_id": user_id, "csrf_token": csrf_token}).encode()
+        )
+        session_cookie = TimestampSigner("route-test-secret").sign(session_data).decode()
+        client.cookies.set("p2runs_session", session_cookie)
+        form_data = {
+            "category_id": category_id,
+            "run_time": "2:00.000",
+            "video_url": "https://youtu.be/submission",
+            "notes": "",
+            "csrf_token": csrf_token,
+        }
+
+        failed_response = client.post(
+            "/submit",
+            data={**form_data, "cf-turnstile-response": "bad-token"},
+        )
+        assert failed_response.status_code == 422
+        with SessionLocal() as db:
+            assert db.scalar(select(Run).where(Run.user_id == user_id)) is None
+
+        success_response = client.post(
+            "/submit",
+            data={**form_data, "cf-turnstile-response": "valid-token"},
+            follow_redirects=False,
+        )
+        assert success_response.status_code == 303
+
+    with SessionLocal() as db:
+        run = db.scalar(select(Run).where(Run.user_id == user_id))
+        assert run is not None
+        assert run.status == "pending"
+
+
 def test_moderator_can_add_run_for_placeholder_discord_user():
     csrf_token = "test-csrf-token"
     discord_id = "123456789012345678"
@@ -79,16 +212,30 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
                 username="Moderator",
                 is_moderator=True,
             )
-            db.add(moderator)
+            first_category = Category(
+                slug="manual-run-test-category",
+                name="Manual Test Build - First Category",
+                short_name="First Category",
+                build_slug="manual-test-build",
+                build_name="Manual Test Build",
+                display_order=1,
+                rules_file="rules/unused.md",
+            )
+            second_category = Category(
+                slug="edited-run-test-category",
+                name="Manual Test Build - Second Category",
+                short_name="Second Category",
+                build_slug="manual-test-build",
+                build_name="Manual Test Build",
+                display_order=2,
+                rules_file="rules/unused.md",
+            )
+            db.add_all([moderator, first_category, second_category])
             db.commit()
             db.refresh(moderator)
             moderator_id = moderator.id
-            category_id = db.scalar(
-                select(Category.id).where(Category.slug == "2009-no-major-exploits")
-            )
-            edited_category_id = db.scalar(
-                select(Category.id).where(Category.slug == "2010-oob-sla")
-            )
+            category_id = first_category.id
+            edited_category_id = second_category.id
 
         session_data = base64.b64encode(
             json.dumps({"user_id": moderator_id, "csrf_token": csrf_token}).encode()

@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import asynccontextmanager
 from datetime import datetime
+import time
 from pathlib import Path
 
 import markdown
@@ -25,6 +26,7 @@ from .config import settings
 from .database import Base, SessionLocal, engine, get_db
 from .models import AuditLog, Category, Run, User, utcnow
 from .security import ensure_csrf_token, verify_csrf
+from .turnstile import turnstile_enabled, verify_turnstile
 from .utils import format_time, ordinal, parse_time_to_ms, validate_video_url
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -56,31 +58,31 @@ BUILD_SEED = [
             },
         ],
     },
-    {
-        "slug": "february-2010-841-0",
-        "name": "February 2010",
-        "version": "841_0",
-        "categories": [
-            {
-                "slug": "2010-no-major-exploits",
-                "name": "No Major Exploits",
-                "description": "",
-                "rules_file": "rules/february-2010-841-0/no-major-exploits.md",
-            },
-            {
-                "slug": "2010-oob-sla",
-                "name": "OOB SLA",
-                "description": "",
-                "rules_file": "rules/february-2010-841-0/oob-sla.md",
-            },
-            {
-                "slug": "2010-in-bounds-no-sla",
-                "name": "In Bounds No SLA",
-                "description": "",
-                "rules_file": "rules/february-2010-841-0/in-bounds-no-sla.md",
-            },
-        ],
-    },
+    # {
+    #     "slug": "february-2010-841-0",
+    #     "name": "February 2010",
+    #     "version": "841_0",
+    #     "categories": [
+    #         {
+    #             "slug": "2010-no-major-exploits",
+    #             "name": "No Major Exploits",
+    #             "description": "",
+    #             "rules_file": "rules/february-2010-841-0/no-major-exploits.md",
+    #         },
+    #         {
+    #             "slug": "2010-oob-sla",
+    #             "name": "OOB SLA",
+    #             "description": "",
+    #             "rules_file": "rules/february-2010-841-0/oob-sla.md",
+    #         },
+    #         {
+    #             "slug": "2010-in-bounds-no-sla",
+    #             "name": "In Bounds No SLA",
+    #             "description": "",
+    #             "rules_file": "rules/february-2010-841-0/in-bounds-no-sla.md",
+    #         },
+    #     ],
+    # },
 ]
 
 
@@ -211,6 +213,8 @@ def template_context(request: Request, db: Session, **extra) -> dict:
         "is_moderator": is_moderator(current_user),
         "csrf_token": ensure_csrf_token(request),
         "oauth_ready": oauth_ready(),
+        "turnstile_enabled": turnstile_enabled(),
+        "turnstile_site_key": settings.turnstile_site_key,
         "flash": flash_message,
         **extra,
     }
@@ -340,10 +344,78 @@ async def auth_callback(
 
     verify_oauth_state(request, state)
     profile = await exchange_code_for_user(code)
+    discord_id = str(profile.get("id", "")).strip()
+    username = str(profile.get("username", "")).strip()
+    if not discord_id or not username:
+        raise HTTPException(status_code=502, detail="Discord returned an incomplete user profile.")
+
+    existing_user = db.scalar(select(User).where(User.discord_id == discord_id))
+    needs_signup_check = existing_user is None or existing_user.last_login_at is None
+    if needs_signup_check and turnstile_enabled():
+        request.session.pop("user_id", None)
+        request.session["pending_discord_signup"] = {
+            "id": discord_id,
+            "username": username,
+            "global_name": profile.get("global_name"),
+            "avatar": profile.get("avatar"),
+        }
+        request.session["pending_discord_signup_started_at"] = int(time.time())
+        return RedirectResponse("/auth/verify", status_code=status.HTTP_303_SEE_OTHER)
+
     user = upsert_discord_user(db, profile)
     request.session["user_id"] = user.id
     request.session.pop("csrf_token", None)
     flash(request, f"Signed in as {user.display_name}.", "success")
+    return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
+
+
+def pending_discord_signup(request: Request) -> dict:
+    profile = request.session.get("pending_discord_signup")
+    started_at = request.session.get("pending_discord_signup_started_at")
+    if not isinstance(profile, dict) or not isinstance(started_at, int):
+        raise HTTPException(status_code=400, detail="No Discord sign-up is pending.")
+    if int(time.time()) - started_at > 10 * 60:
+        request.session.pop("pending_discord_signup", None)
+        request.session.pop("pending_discord_signup_started_at", None)
+        raise HTTPException(status_code=400, detail="Discord sign-up expired. Please start again.")
+    return profile
+
+
+@app.get("/auth/verify", response_class=HTMLResponse)
+def signup_verification(request: Request, db: Session = Depends(get_db)):
+    pending_discord_signup(request)
+    return render_template(
+        "auth_verify.html",
+        template_context(request, db, errors=[]),
+    )
+
+
+@app.post("/auth/verify", response_class=HTMLResponse)
+def complete_signup_verification(
+    request: Request,
+    csrf_token: str = Form(...),
+    cf_turnstile_response: str = Form("", alias="cf-turnstile-response"),
+    db: Session = Depends(get_db),
+):
+    verify_csrf(request, csrf_token)
+    profile = pending_discord_signup(request)
+    if not verify_turnstile(cf_turnstile_response, "discord_signup"):
+        return render_template(
+            "auth_verify.html",
+            template_context(
+                request,
+                db,
+                errors=["Complete the CAPTCHA and try again."],
+            ),
+            status_code=422,
+        )
+
+    user = upsert_discord_user(db, profile)
+    request.session.pop("pending_discord_signup", None)
+    request.session.pop("pending_discord_signup_started_at", None)
+    request.session["user_id"] = user.id
+    request.session.pop("csrf_token", None)
+    flash(request, f"Sign-up complete. Signed in as {user.display_name}.", "success")
     return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -374,6 +446,7 @@ def submit_run(
     video_url: str = Form(...),
     notes: str = Form(""),
     csrf_token: str = Form(...),
+    cf_turnstile_response: str = Form("", alias="cf-turnstile-response"),
     db: Session = Depends(get_db),
 ):
     user = require_user(request, db)
@@ -400,6 +473,8 @@ def submit_run(
     clean_notes = notes.strip()
     if len(clean_notes) > 2000:
         errors.append("Notes must be 2,000 characters or fewer.")
+    if not errors and not verify_turnstile(cf_turnstile_response, "submit_run"):
+        errors.append("Complete the CAPTCHA and try again.")
 
     if errors:
         return render_template(

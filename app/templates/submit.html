@@ -1,5 +1,8 @@
 {% extends "base.html" %}
 {% block title %}Submit · {{ app_name }}{% endblock %}
+{% block head %}
+{% if turnstile_enabled %}<script src="https://challenges.cloudflare.com/turnstile/v0/api.js" async defer></script>{% endif %}
+{% endblock %}
 {% block content %}
 <div class="title-row"><h1>Submit</h1></div>
 
@@ -36,6 +39,9 @@
     Notes <span class="muted">(optional)</span>
     <textarea name="notes" rows="4" maxlength="2000">{{ values.notes or '' }}</textarea>
   </label>
+  {% if turnstile_enabled %}
+  <div class="cf-turnstile" data-sitekey="{{ turnstile_site_key }}" data-theme="dark" data-size="flexible" data-action="submit_run"></div>
+  {% endif %}
   <button type="submit">Submit</button>
 </form>
 {% endblock %}
