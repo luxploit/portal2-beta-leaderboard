@@ -298,7 +298,8 @@ tbody tr:last-child td {
 }
 
 .audit-action.approved,
-.audit-action.added_manually {
+.audit-action.added_manually,
+.audit-action.edited {
   color: var(--success);
 }
 
@@ -529,8 +530,11 @@ textarea {
   flex: 1 1 360px;
 }
 
-.delete-run-form {
+.run-admin-actions {
   margin-top: 28px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
 }
 
 @media (max-width: 680px) {

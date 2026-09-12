@@ -530,6 +530,176 @@ def add_run_as_moderator_form(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@app.get("/moderation/runs/{run_id}/edit", response_class=HTMLResponse)
+def edit_run_as_moderator_form(
+    run_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+):
+    require_moderator(request, db)
+    run = db.scalar(
+        select(Run)
+        .options(joinedload(Run.runner), joinedload(Run.category))
+        .where(Run.id == run_id)
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+    categories = db.scalars(
+        select(Category).order_by(Category.build_order, Category.display_order)
+    ).all()
+    return render_template(
+        "moderation_edit_run.html",
+        template_context(
+            request,
+            db,
+            run=run,
+            categories=categories,
+            values={
+                "discord_id": run.runner.discord_id,
+                "temporary_display_name": run.runner.display_name,
+                "category_id": run.category_id,
+                "run_time": format_time(run.time_ms),
+                "video_url": run.video_url,
+                "notes": run.notes,
+            },
+            errors=[],
+        ),
+    )
+
+
+@app.post("/moderation/runs/{run_id}/edit", response_class=HTMLResponse)
+def edit_run_as_moderator(
+    run_id: int,
+    request: Request,
+    discord_id: str = Form(...),
+    temporary_display_name: str = Form(...),
+    category_id: int = Form(...),
+    run_time: str = Form(...),
+    video_url: str = Form(...),
+    notes: str = Form(""),
+    csrf_token: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    moderator = require_moderator(request, db)
+    verify_csrf(request, csrf_token)
+    run = db.scalar(
+        select(Run)
+        .options(joinedload(Run.runner), joinedload(Run.category))
+        .where(Run.id == run_id)
+    )
+    if run is None:
+        raise HTTPException(status_code=404, detail="Run not found.")
+
+    clean_discord_id = discord_id.strip()
+    clean_display_name = temporary_display_name.strip()
+    clean_notes = notes.strip()
+    category = db.get(Category, category_id)
+    errors: list[str] = []
+
+    if not clean_discord_id.isdigit() or not 15 <= len(clean_discord_id) <= 25:
+        errors.append("Enter a valid numeric Discord user ID.")
+    if not clean_display_name:
+        errors.append("Enter a temporary display name.")
+    elif len(clean_display_name) > 80:
+        errors.append("Temporary display name must be 80 characters or fewer.")
+    if category is None:
+        errors.append("Choose a valid category.")
+    try:
+        time_ms = parse_time_to_ms(run_time)
+    except ValueError as exc:
+        time_ms = 0
+        errors.append(str(exc))
+    try:
+        clean_video_url = validate_video_url(video_url)
+    except ValueError as exc:
+        clean_video_url = video_url.strip()
+        errors.append(str(exc))
+    if len(clean_notes) > 2000:
+        errors.append("Notes must be 2,000 characters or fewer.")
+
+    values = {
+        "discord_id": discord_id,
+        "temporary_display_name": temporary_display_name,
+        "category_id": category_id,
+        "run_time": run_time,
+        "video_url": video_url,
+        "notes": notes,
+    }
+    if errors:
+        categories = db.scalars(
+            select(Category).order_by(Category.build_order, Category.display_order)
+        ).all()
+        return render_template(
+            "moderation_edit_run.html",
+            template_context(
+                request,
+                db,
+                run=run,
+                categories=categories,
+                values=values,
+                errors=errors,
+            ),
+            status_code=422,
+        )
+
+    old_runner = run.runner
+    old_category = run.category
+    old_runner_name = old_runner.display_name
+    old_runner_discord_id = old_runner.discord_id
+    old_time_ms = run.time_ms
+    old_video_url = run.video_url
+    old_notes = run.notes
+
+    runner = db.scalar(select(User).where(User.discord_id == clean_discord_id))
+    if runner is None:
+        runner = User(discord_id=clean_discord_id, username=clean_display_name)
+        db.add(runner)
+        db.flush()
+    elif runner.last_login_at is None:
+        runner.username = clean_display_name
+
+    changes: list[str] = []
+    if old_runner_discord_id != runner.discord_id:
+        changes.append(
+            f"Runner: {old_runner_name} ({old_runner_discord_id}) to "
+            f"{runner.display_name} ({runner.discord_id})."
+        )
+    elif old_runner_name != runner.display_name:
+        changes.append(f"Temporary runner name: {old_runner_name} to {runner.display_name}.")
+    if old_category.id != category.id:
+        changes.append(
+            f"Category: {old_category.build_name} · {old_category.display_name} to "
+            f"{category.build_name} · {category.display_name}."
+        )
+    if old_time_ms != time_ms:
+        changes.append(f"Time: {format_time(old_time_ms)} to {format_time(time_ms)}.")
+    if old_video_url != clean_video_url:
+        changes.append("Video URL changed.")
+    if old_notes != clean_notes:
+        changes.append("Notes changed.")
+
+    run.user_id = runner.id
+    run.category_id = category.id
+    run.time_ms = time_ms
+    run.video_url = clean_video_url
+    run.notes = clean_notes
+    if changes:
+        audit_run_event(
+            db,
+            "edited",
+            moderator,
+            run,
+            runner=runner,
+            category=category,
+            details=" ".join(changes),
+        )
+        flash(request, f"Run #{run.id} updated.", "success")
+    else:
+        flash(request, f"No changes made to run #{run.id}.", "info")
+    db.commit()
+    return RedirectResponse(f"/runs/{run.id}", status_code=status.HTTP_303_SEE_OTHER)
+
+
 @app.post("/moderation/runs/add", response_class=HTMLResponse)
 def add_run_as_moderator(
     request: Request,

@@ -18,6 +18,7 @@
   </div>
   {% if run.notes %}<p class="run-notes">{{ run.notes }}</p>{% endif %}
   <div class="review-actions">
+    <a href="/moderation/runs/{{ run.id }}/edit">Edit</a>
     <form method="post" action="/moderation/{{ run.id }}/approve">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="submit">Approve</button>

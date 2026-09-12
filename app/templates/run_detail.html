@@ -18,10 +18,13 @@
 {% if run.notes %}<div class="notes"><h2>Notes</h2><p>{{ run.notes }}</p></div>{% endif %}
 {% if run.status == 'rejected' %}<p class="error-text">{{ run.rejection_reason }}</p>{% endif %}
 {% if is_moderator %}
-<form class="delete-run-form" method="post" action="/runs/{{ run.id }}/delete" onsubmit="return confirm('Delete this run permanently?');">
-  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-  <input type="hidden" name="return_to" value="category">
-  <button class="danger" type="submit">Delete run</button>
-</form>
+<div class="run-admin-actions">
+  <a href="/moderation/runs/{{ run.id }}/edit">Edit run</a>
+  <form method="post" action="/runs/{{ run.id }}/delete" onsubmit="return confirm('Delete this run permanently?');">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <input type="hidden" name="return_to" value="category">
+    <button class="danger" type="submit">Delete run</button>
+  </form>
+</div>
 {% endif %}
 {% endblock %}

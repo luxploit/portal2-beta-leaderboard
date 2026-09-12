@@ -86,6 +86,9 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
             category_id = db.scalar(
                 select(Category.id).where(Category.slug == "2009-no-major-exploits")
             )
+            edited_category_id = db.scalar(
+                select(Category.id).where(Category.slug == "2010-oob-sla")
+            )
 
         session_data = base64.b64encode(
             json.dumps({"user_id": moderator_id, "csrf_token": csrf_token}).encode()
@@ -115,6 +118,26 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
             follow_redirects=False,
         )
         assert response.status_code == 303
+        run_id = int(response.headers["location"].rsplit("/", 1)[-1])
+
+        edit_form_response = client.get(f"/moderation/runs/{run_id}/edit")
+        assert edit_form_response.status_code == 200
+        assert "Temporary Runner" in edit_form_response.text
+
+        edit_response = client.post(
+            f"/moderation/runs/{run_id}/edit",
+            data={
+                "discord_id": discord_id,
+                "temporary_display_name": "Corrected Runner",
+                "category_id": edited_category_id,
+                "run_time": "1:20.000",
+                "video_url": "https://youtu.be/corrected",
+                "notes": "Corrected notes.",
+                "csrf_token": csrf_token,
+            },
+            follow_redirects=False,
+        )
+        assert edit_response.status_code == 303
 
         forbidden_response = client.get("/owner/audit-log")
         assert forbidden_response.status_code == 403
@@ -135,12 +158,13 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
         audit_response = client.get("/owner/audit-log")
         assert audit_response.status_code == 200
         assert "Added Manually" in audit_response.text
+        assert "Edited" in audit_response.text
         assert discord_id in audit_response.text
 
     with SessionLocal() as db:
         runner = db.scalar(select(User).where(User.discord_id == discord_id))
         assert runner is not None
-        assert runner.display_name == "Temporary Runner"
+        assert runner.display_name == "Corrected Runner"
         run = db.scalar(
             select(Run)
             .options(joinedload(Run.runner))
@@ -149,6 +173,10 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
         assert run is not None
         assert run.status == "approved"
         assert run.reviewed_by_user_id == moderator_id
+        assert run.category_id == edited_category_id
+        assert run.time_ms == 80_000
+        assert run.video_url == "https://youtu.be/corrected"
+        assert run.notes == "Corrected notes."
         audit_entry = db.scalar(
             select(AuditLog).where(
                 AuditLog.run_id == run.id,
@@ -157,6 +185,16 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
         )
         assert audit_entry is not None
         assert audit_entry.runner_name == "Temporary Runner"
+        edited_entry = db.scalar(
+            select(AuditLog).where(
+                AuditLog.run_id == run.id,
+                AuditLog.action == "edited",
+            )
+        )
+        assert edited_entry is not None
+        assert "Temporary runner name" in edited_entry.details
+        assert "Category:" in edited_entry.details
+        assert "Time:" in edited_entry.details
 
         upsert_discord_user(
             db,
