@@ -288,6 +288,11 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
 
         forbidden_response = client.get("/owner/audit-log")
         assert forbidden_response.status_code == 403
+        forbidden_download = client.post(
+            "/owner/database/download",
+            data={"csrf_token": csrf_token},
+        )
+        assert forbidden_download.status_code == 403
 
         with SessionLocal() as db:
             owner = User(discord_id=os.environ["OWNER_DISCORD_ID"], username="Owner")
@@ -307,6 +312,14 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
         assert "Added Manually" in audit_response.text
         assert "Edited" in audit_response.text
         assert discord_id in audit_response.text
+
+        snapshot_response = client.post(
+            "/owner/database/download",
+            data={"csrf_token": csrf_token},
+        )
+        assert snapshot_response.status_code == 200
+        assert snapshot_response.content.startswith(b"SQLite format 3\x00")
+        assert "attachment;" in snapshot_response.headers["content-disposition"]
 
     with SessionLocal() as db:
         runner = db.scalar(select(User).where(User.discord_id == discord_id))

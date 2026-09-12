@@ -1,18 +1,21 @@
 from __future__ import annotations
 
+import sqlite3
+import tempfile
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
-import time
 from pathlib import Path
 
 import markdown
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from markupsafe import Markup
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
+from starlette.background import BackgroundTask
 from starlette.middleware.sessions import SessionMiddleware
 
 from .auth import (
@@ -946,6 +949,47 @@ def owner_audit_log(request: Request, db: Session = Depends(get_db)):
     return render_template(
         "owner_audit_log.html",
         template_context(request, db, entries=entries),
+    )
+
+
+@app.post("/owner/database/download")
+def download_database_snapshot(
+    request: Request,
+    csrf_token: str = Form(...),
+    db: Session = Depends(get_db),
+):
+    require_owner(request, db)
+    verify_csrf(request, csrf_token)
+    if engine.url.get_backend_name() != "sqlite":
+        raise HTTPException(status_code=501, detail="Database snapshots require SQLite.")
+
+    database_path_value = engine.url.database
+    if not database_path_value or database_path_value == ":memory:":
+        raise HTTPException(status_code=503, detail="The SQLite database is not stored on disk.")
+    database_path = Path(database_path_value).resolve()
+    if not database_path.is_file():
+        raise HTTPException(status_code=503, detail="The SQLite database file was not found.")
+
+    temporary_file = tempfile.NamedTemporaryFile(
+        prefix="portal2-runs-",
+        suffix=".db",
+        delete=False,
+    )
+    snapshot_path = Path(temporary_file.name)
+    temporary_file.close()
+    try:
+        with sqlite3.connect(database_path) as source, sqlite3.connect(snapshot_path) as destination:
+            source.backup(destination)
+    except sqlite3.Error as exc:
+        snapshot_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=500, detail="Could not create a database snapshot.") from exc
+
+    filename = f"portal2-runs-{utcnow().strftime('%Y%m%d-%H%M%S')}.db"
+    return FileResponse(
+        snapshot_path,
+        media_type="application/vnd.sqlite3",
+        filename=filename,
+        background=BackgroundTask(snapshot_path.unlink, missing_ok=True),
     )
 
 
