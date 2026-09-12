@@ -284,6 +284,33 @@ tbody tr:last-child td {
   text-align: right;
 }
 
+.audit-table {
+  min-width: 1050px;
+}
+
+.audit-date {
+  white-space: nowrap;
+}
+
+.audit-action {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.audit-action.approved,
+.audit-action.added_manually {
+  color: var(--success);
+}
+
+.audit-action.rejected,
+.audit-action.deleted {
+  color: var(--danger);
+}
+
+.audit-action.submitted {
+  color: var(--warning);
+}
+
 .empty {
   color: var(--muted);
 }

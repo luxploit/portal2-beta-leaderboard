@@ -23,7 +23,7 @@ from .auth import (
 )
 from .config import settings
 from .database import Base, SessionLocal, engine, get_db
-from .models import Category, Run, User, utcnow
+from .models import AuditLog, Category, Run, User, utcnow
 from .security import ensure_csrf_token, verify_csrf
 from .utils import format_time, ordinal, parse_time_to_ms, validate_video_url
 
@@ -236,6 +236,34 @@ def best_approved_runs(db: Session, category_id: int, limit: int | None = None) 
     return best
 
 
+def audit_run_event(
+    db: Session,
+    action: str,
+    actor: User,
+    run: Run,
+    *,
+    runner: User | None = None,
+    category: Category | None = None,
+    details: str = "",
+) -> None:
+    """Store immutable display snapshots so deleted runs remain auditable."""
+    runner = runner or run.runner
+    category = category or run.category
+    db.add(
+        AuditLog(
+            action=action,
+            run_id=run.id,
+            actor_discord_id=actor.discord_id,
+            actor_name=actor.display_name,
+            runner_discord_id=runner.discord_id,
+            runner_name=runner.display_name,
+            category_name=f"{category.build_name} · {category.display_name}",
+            time_ms=run.time_ms,
+            details=details,
+        )
+    )
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, db: Session = Depends(get_db)):
     categories = db.scalars(
@@ -400,6 +428,8 @@ def submit_run(
         status="pending",
     )
     db.add(run)
+    db.flush()
+    audit_run_event(db, "submitted", user, run, runner=user, category=category)
     db.commit()
     db.refresh(run)
     flash(request, "Run submitted for moderator review.", "success")
@@ -445,7 +475,7 @@ def delete_run(
     return_to: str = Form("category"),
     db: Session = Depends(get_db),
 ):
-    require_moderator(request, db)
+    moderator = require_moderator(request, db)
     verify_csrf(request, csrf_token)
 
     run = db.scalar(
@@ -458,6 +488,13 @@ def delete_run(
 
     deleted_run_id = run.id
     category_slug = run.category.slug
+    audit_run_event(
+        db,
+        "deleted",
+        moderator,
+        run,
+        details=f"Previous status: {run.status}.",
+    )
     db.delete(run)
     db.commit()
 
@@ -577,6 +614,16 @@ def add_run_as_moderator(
         reviewed_by_user_id=moderator.id,
     )
     db.add(run)
+    db.flush()
+    audit_run_event(
+        db,
+        "added_manually",
+        moderator,
+        run,
+        runner=runner,
+        category=category,
+        details="Approved when added manually.",
+    )
     db.commit()
     db.refresh(run)
     flash(request, f"Run #{run.id} added for {runner.display_name}.", "success")
@@ -606,6 +653,7 @@ def approve_run(
     run.reviewed_at = utcnow()
     run.reviewed_by_user_id = moderator.id
     run.rejection_reason = None
+    audit_run_event(db, "approved", moderator, run)
     db.commit()
     flash(request, f"Run #{run.id} approved.", "success")
     return RedirectResponse("/moderation", status_code=status.HTTP_303_SEE_OTHER)
@@ -630,6 +678,7 @@ def reject_run(
     run.reviewed_at = utcnow()
     run.reviewed_by_user_id = moderator.id
     run.rejection_reason = reason or "No reason provided."
+    audit_run_event(db, "rejected", moderator, run, details=run.rejection_reason)
     db.commit()
     flash(request, f"Run #{run.id} rejected.", "info")
     return RedirectResponse("/moderation", status_code=status.HTTP_303_SEE_OTHER)
@@ -642,6 +691,16 @@ def owner_mods(request: Request, db: Session = Depends(get_db)):
     return render_template(
         "owner_mods.html",
         template_context(request, db, users=users),
+    )
+
+
+@app.get("/owner/audit-log", response_class=HTMLResponse)
+def owner_audit_log(request: Request, db: Session = Depends(get_db)):
+    require_owner(request, db)
+    entries = db.scalars(select(AuditLog).order_by(AuditLog.created_at.desc(), AuditLog.id.desc())).all()
+    return render_template(
+        "owner_audit_log.html",
+        template_context(request, db, entries=entries),
     )
 
 

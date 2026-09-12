@@ -8,6 +8,7 @@ TEST_DB = Path(tempfile.gettempdir()) / "portal2_runs_route_tests.db"
 TEST_DB.unlink(missing_ok=True)
 os.environ["DATABASE_URL"] = f"sqlite:///{TEST_DB.as_posix()}"
 os.environ["SESSION_SECRET"] = "route-test-secret"
+os.environ["OWNER_DISCORD_ID"] = "111111111111111111"
 
 from fastapi.testclient import TestClient
 from itsdangerous import TimestampSigner
@@ -17,7 +18,7 @@ from sqlalchemy.orm import joinedload
 from app.auth import upsert_discord_user
 from app.database import SessionLocal, engine
 from app.main import app
-from app.models import Category, Run, User
+from app.models import AuditLog, Category, Run, User
 
 
 def test_public_pages_render_with_current_starlette():
@@ -115,6 +116,27 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
         )
         assert response.status_code == 303
 
+        forbidden_response = client.get("/owner/audit-log")
+        assert forbidden_response.status_code == 403
+
+        with SessionLocal() as db:
+            owner = User(discord_id=os.environ["OWNER_DISCORD_ID"], username="Owner")
+            db.add(owner)
+            db.commit()
+            db.refresh(owner)
+            owner_id = owner.id
+
+        owner_session = base64.b64encode(
+            json.dumps({"user_id": owner_id, "csrf_token": csrf_token}).encode()
+        )
+        owner_cookie = TimestampSigner("route-test-secret").sign(owner_session).decode()
+        client.cookies.clear()
+        client.cookies.set("p2runs_session", owner_cookie)
+        audit_response = client.get("/owner/audit-log")
+        assert audit_response.status_code == 200
+        assert "Added Manually" in audit_response.text
+        assert discord_id in audit_response.text
+
     with SessionLocal() as db:
         runner = db.scalar(select(User).where(User.discord_id == discord_id))
         assert runner is not None
@@ -127,6 +149,14 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
         assert run is not None
         assert run.status == "approved"
         assert run.reviewed_by_user_id == moderator_id
+        audit_entry = db.scalar(
+            select(AuditLog).where(
+                AuditLog.run_id == run.id,
+                AuditLog.action == "added_manually",
+            )
+        )
+        assert audit_entry is not None
+        assert audit_entry.runner_name == "Temporary Runner"
 
         upsert_discord_user(
             db,

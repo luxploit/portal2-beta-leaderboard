@@ -15,7 +15,7 @@
         {% if current_user %}
           <a href="/submit">Submit</a>
           {% if is_moderator %}<a href="/moderation">Moderation</a>{% endif %}
-          {% if is_owner %}<a href="/owner/mods">Mods</a>{% endif %}
+          {% if is_owner %}<a href="/owner/audit-log">Audit log</a><a href="/owner/mods">Mods</a>{% endif %}
           <a class="user-link" href="/me" title="My runs">
             <img class="user-avatar" src="{{ current_user_avatar_url }}" alt="" width="24" height="24">
             <span>{{ current_user.display_name }}</span>

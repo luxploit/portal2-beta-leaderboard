@@ -78,3 +78,19 @@ class Run(Base):
     runner: Mapped[User] = relationship(back_populates="runs", foreign_keys=[user_id])
     category: Mapped[Category] = relationship(back_populates="runs")
     reviewed_by: Mapped[User | None] = relationship(foreign_keys=[reviewed_by_user_id])
+
+
+class AuditLog(Base):
+    __tablename__ = "audit_logs"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    action: Mapped[str] = mapped_column(String(32), index=True)
+    run_id: Mapped[int] = mapped_column(Integer, index=True)
+    actor_discord_id: Mapped[str] = mapped_column(String(32))
+    actor_name: Mapped[str] = mapped_column(String(80))
+    runner_discord_id: Mapped[str] = mapped_column(String(32))
+    runner_name: Mapped[str] = mapped_column(String(80))
+    category_name: Mapped[str] = mapped_column(String(240))
+    time_ms: Mapped[int] = mapped_column(Integer)
+    details: Mapped[str] = mapped_column(Text, default="")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
