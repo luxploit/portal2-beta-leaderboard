@@ -9,7 +9,7 @@
   <div class="review-main">
     <div>
       <h2>{{ run.time_ms|runtime }}</h2>
-      <p><a href="/runs/{{ run.id }}">#{{ run.id }}</a> · {{ run.category.name }} · {{ run.runner.display_name }}</p>
+      <p><a href="/runs/{{ run.id }}">#{{ run.id }}</a> · {{ run.category.build_name }} · {{ run.category.display_name }} · {{ run.runner.display_name }}</p>
     </div>
     <a href="{{ run.video_url }}" target="_blank" rel="noopener noreferrer">Video</a>
   </div>

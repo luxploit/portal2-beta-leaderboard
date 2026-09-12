@@ -1,7 +1,10 @@
 {% extends "base.html" %}
-{% block title %}{{ category.name }} · {{ app_name }}{% endblock %}
+{% block title %}{{ category.display_name }} · {{ category.build_name }} · {{ app_name }}{% endblock %}
 {% block content %}
-<div class="title-row"><h1>{{ category.name }}</h1></div>
+<div class="title-row">
+  <div><p class="eyebrow">{{ category.build_name }}</p><h1>{{ category.display_name }}</h1></div>
+  <a href="/category/{{ category.slug }}/rules">Category rules</a>
+</div>
 {% if runs %}
 <div class="table-wrap">
   <table class="leaderboard-table">

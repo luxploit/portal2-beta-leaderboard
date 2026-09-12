@@ -15,7 +15,12 @@
     Category
     <select name="category_id" required>
       {% for category in categories %}
-      <option value="{{ category.id }}" {% if values.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
+        {% if loop.first or category.build_slug != categories[loop.index0 - 1].build_slug %}
+          {% if not loop.first %}</optgroup>{% endif %}
+          <optgroup label="{{ category.build_name }}">
+        {% endif %}
+        <option value="{{ category.id }}" {% if values.category_id == category.id %}selected{% endif %}>{{ category.display_name }}</option>
+        {% if loop.last %}</optgroup>{% endif %}
       {% endfor %}
     </select>
   </label>

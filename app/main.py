@@ -4,10 +4,12 @@ from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
 
+import markdown
 from fastapi import Depends, FastAPI, Form, HTTPException, Request, status
 from fastapi.responses import HTMLResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+from markupsafe import Markup
 from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 from starlette.middleware.sessions import SessionMiddleware
@@ -26,30 +28,79 @@ from .security import ensure_csrf_token, verify_csrf
 from .utils import format_time, ordinal, parse_time_to_ms, validate_video_url
 
 BASE_DIR = Path(__file__).resolve().parent
-CATEGORY_SEED = [
-    ("2009-no-major-exploits", "2009 No Major Exploits", "", 1),
-    ("2009-oob-sla", "2009 OOB SLA", "", 2),
-    ("2009-in-bounds-no-sla", "2009 In Bounds No SLA", "", 3),
+RULES_DIR = BASE_DIR.parent / "rules"
+
+BUILD_SEED = [
+    {
+        "slug": "july-2009-852-0",
+        "name": "July 2009",
+        "version": "852_0",
+        "categories": [
+            {
+                "slug": "2009-no-major-exploits",
+                "name": "No Major Exploits",
+                "description": "",
+                "rules_file": "rules/july-2009-852-0/no-major-exploits.md",
+            },
+            {
+                "slug": "2009-oob-sla",
+                "name": "OOB SLA",
+                "description": "",
+                "rules_file": "rules/july-2009-852-0/oob-sla.md",
+            },
+            {
+                "slug": "2009-in-bounds-no-sla",
+                "name": "In Bounds No SLA",
+                "description": "",
+                "rules_file": "rules/july-2009-852-0/in-bounds-no-sla.md",
+            },
+        ],
+    },
+    {
+        "slug": "february-2010-841-0",
+        "name": "February 2010",
+        "version": "841_0",
+        "categories": [
+            {
+                "slug": "2010-no-major-exploits",
+                "name": "No Major Exploits",
+                "description": "",
+                "rules_file": "rules/february-2010-841-0/no-major-exploits.md",
+            },
+            {
+                "slug": "2010-oob-sla",
+                "name": "OOB SLA",
+                "description": "",
+                "rules_file": "rules/february-2010-841-0/oob-sla.md",
+            },
+            {
+                "slug": "2010-in-bounds-no-sla",
+                "name": "In Bounds No SLA",
+                "description": "",
+                "rules_file": "rules/february-2010-841-0/in-bounds-no-sla.md",
+            },
+        ],
+    },
 ]
 
 
 def seed_categories() -> None:
     with SessionLocal() as db:
-        for slug, name, description, order in CATEGORY_SEED:
-            category = db.scalar(select(Category).where(Category.slug == slug))
-            if category is None:
-                db.add(
-                    Category(
-                        slug=slug,
-                        name=name,
-                        description=description,
-                        display_order=order,
-                    )
-                )
-            else:
-                category.name = name
-                category.description = description
-                category.display_order = order
+        for build_order, build in enumerate(BUILD_SEED, start=1):
+            build_label = f'{build["name"]} {build["version"]}'
+            for category_order, seed in enumerate(build["categories"], start=1):
+                category = db.scalar(select(Category).where(Category.slug == seed["slug"]))
+                if category is None:
+                    category = Category(slug=seed["slug"])
+                    db.add(category)
+                category.name = f'{build_label} - {seed["name"]}'
+                category.short_name = seed["name"]
+                category.description = seed.get("description", "")
+                category.display_order = category_order
+                category.build_slug = build["slug"]
+                category.build_name = build_label
+                category.build_order = build_order
+                category.rules_file = seed["rules_file"]
         db.commit()
 
 
@@ -187,10 +238,22 @@ def best_approved_runs(db: Session, category_id: int, limit: int | None = None) 
 
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, db: Session = Depends(get_db)):
-    categories = db.scalars(select(Category).order_by(Category.display_order)).all()
+    categories = db.scalars(
+        select(Category).order_by(Category.build_order, Category.display_order)
+    ).all()
+    builds = []
+    for build in BUILD_SEED:
+        build_categories = [category for category in categories if category.build_slug == build["slug"]]
+        builds.append(
+            {
+                **build,
+                "label": f'{build["name"]} {build["version"]}',
+                "categories": build_categories,
+            }
+        )
     return render_template(
         "home.html",
-        template_context(request, db, categories=categories),
+        template_context(request, db, builds=builds),
     )
 
 
@@ -203,6 +266,29 @@ def category_page(slug: str, request: Request, db: Session = Depends(get_db)):
     return render_template(
         "category.html",
         template_context(request, db, category=category, runs=runs),
+    )
+
+
+@app.get("/category/{slug}/rules", response_class=HTMLResponse)
+def category_rules(slug: str, request: Request, db: Session = Depends(get_db)):
+    category = db.scalar(select(Category).where(Category.slug == slug))
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found.")
+
+    rules_path = (BASE_DIR.parent / category.rules_file).resolve()
+    rules_root = RULES_DIR.resolve()
+    if rules_root not in rules_path.parents or not rules_path.is_file():
+        raise HTTPException(status_code=404, detail="Rules not found.")
+
+    rules_html = Markup(
+        markdown.markdown(
+            rules_path.read_text(encoding="utf-8"),
+            extensions=["extra", "sane_lists"],
+        )
+    )
+    return render_template(
+        "category_rules.html",
+        template_context(request, db, category=category, rules_html=rules_html),
     )
 
 
@@ -243,7 +329,9 @@ def logout(request: Request, csrf_token: str = Form(...)):
 @app.get("/submit", response_class=HTMLResponse)
 def submit_form(request: Request, db: Session = Depends(get_db)):
     require_user(request, db)
-    categories = db.scalars(select(Category).order_by(Category.display_order)).all()
+    categories = db.scalars(
+        select(Category).order_by(Category.build_order, Category.display_order)
+    ).all()
     return render_template(
         "submit.html",
         template_context(request, db, categories=categories, values={}, errors=[]),
@@ -262,7 +350,9 @@ def submit_run(
 ):
     user = require_user(request, db)
     verify_csrf(request, csrf_token)
-    categories = db.scalars(select(Category).order_by(Category.display_order)).all()
+    categories = db.scalars(
+        select(Category).order_by(Category.build_order, Category.display_order)
+    ).all()
     category = db.get(Category, category_id)
     errors: list[str] = []
 

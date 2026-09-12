@@ -179,6 +179,51 @@ h2 {
   gap: 12px;
 }
 
+.build-list {
+  display: grid;
+  gap: 36px;
+}
+
+.build-group h2 {
+  margin-bottom: 14px;
+  color: var(--text);
+  font-size: 1.65rem;
+}
+
+.build-group .category-list a {
+  color: var(--muted);
+  font-size: 1.1rem;
+  font-weight: 600;
+}
+
+.build-group .category-list a:hover {
+  color: var(--text);
+}
+
+.eyebrow {
+  margin: 0 0 7px;
+  color: var(--muted);
+  font-size: .9rem;
+}
+
+.rules-content {
+  max-width: 760px;
+}
+
+.rules-content h1,
+.rules-content h2,
+.rules-content h3 {
+  margin: 1.6em 0 .6em;
+}
+
+.rules-content > :first-child {
+  margin-top: 0;
+}
+
+.rules-content code {
+  font-family: ui-monospace, Consolas, monospace;
+}
+
 .category-list a {
   color: var(--text);
   font-size: 1.35rem;
@@ -321,6 +366,20 @@ textarea {
   border-radius: 3px;
   color: var(--text);
   padding: 8px 9px;
+}
+
+select {
+  color-scheme: dark;
+}
+
+select option,
+select optgroup {
+  background: #181a1e;
+  color: var(--text);
+}
+
+select optgroup {
+  font-weight: 700;
 }
 
 input:focus,

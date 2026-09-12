@@ -9,7 +9,7 @@
   <tbody>
   {% for run in runs %}
   <tr>
-    <td>{{ run.category.name }}</td>
+    <td>{{ run.category.build_name }} · {{ run.category.display_name }}</td>
     <td class="time"><a href="/runs/{{ run.id }}">{{ run.time_ms|runtime }}</a></td>
     <td><span class="status {{ run.status }}">{{ run.status }}</span></td>
     <td>{{ run.submitted_at.strftime('%Y-%m-%d') }}</td>

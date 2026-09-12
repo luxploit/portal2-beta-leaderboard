@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ category.display_name }} rules · {{ app_name }}{% endblock %}
+{% block content %}
+<div class="title-row">
+  <div><p class="eyebrow">{{ category.build_name }}</p><h1>{{ category.display_name }} rules</h1></div>
+  <a href="/category/{{ category.slug }}">Back to leaderboard</a>
+</div>
+<article class="rules-content">{{ rules_html }}</article>
+{% endblock %}
