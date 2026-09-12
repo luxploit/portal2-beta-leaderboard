@@ -112,6 +112,20 @@ nav a,
   margin-bottom: 32px;
 }
 
+.moderator-list {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+}
+
+.about-logo {
+  display: block;
+  width: min(100%, 512px);
+  height: auto;
+  margin-bottom: 24px;
+}
+
 .profile-color-slate {
   background: #141519;
 }

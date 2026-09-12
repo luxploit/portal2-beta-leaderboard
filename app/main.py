@@ -308,6 +308,23 @@ def home(request: Request, db: Session = Depends(get_db)):
     )
 
 
+@app.get("/about", response_class=HTMLResponse)
+def about_page(request: Request, db: Session = Depends(get_db)):
+    moderators = db.scalars(
+        select(User).where(
+            User.is_moderator.is_(True) | (User.discord_id == settings.owner_discord_id)
+        ).order_by(User.username.asc())
+    ).all()
+    return render_template(
+        "about.html",
+        template_context(
+            request,
+            db,
+            moderators=[{"user": user, "avatar_url": discord_avatar_url(user)} for user in moderators],
+        ),
+    )
+
+
 @app.get("/category/{slug}", response_class=HTMLResponse)
 def category_page(slug: str, request: Request, db: Session = Depends(get_db)):
     category = db.scalar(select(Category).where(Category.slug == slug))

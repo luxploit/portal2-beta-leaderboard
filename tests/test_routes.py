@@ -36,6 +36,30 @@ def test_public_pages_render_with_current_starlette():
         assert css_response.status_code == 200
 
 
+def test_about_page_lists_moderators_and_owner_only():
+    with TestClient(app) as client:
+        with SessionLocal() as db:
+            db.add_all([
+                User(discord_id="111111111111111111", username="about_owner"),
+                User(discord_id="about-mod", username="about_moderator", is_moderator=True),
+                User(discord_id="about-runner", username="about_regular_runner"),
+            ])
+            db.commit()
+        response = client.get("/about")
+        assert response.status_code == 200
+        assert 'href="/about">About' in response.text
+        assert 'href="/users/about-mod"' in response.text
+        assert 'href="/users/111111111111111111"' in response.text
+        assert "about_regular_runner" not in response.text
+        assert '<meta property="og:title"' in response.text
+        with SessionLocal() as db:
+            for user in db.scalars(select(User).where(User.username.in_(
+                ["about_owner", "about_moderator", "about_regular_runner"]
+            ))):
+                db.delete(user)
+            db.commit()
+
+
 def test_category_rules_are_rendered_from_markdown(monkeypatch, tmp_path):
     rules_dir = tmp_path / "rules"
     rules_dir.mkdir()

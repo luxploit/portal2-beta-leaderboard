@@ -14,6 +14,7 @@
     <div class="wrap nav-wrap">
       <a class="brand" href="/">{{ app_name }}</a>
       <nav aria-label="Primary">
+        <a href="/about">About</a>
         {% if current_user %}
           <a href="/submit">Submit</a>
           {% if is_moderator %}<a href="/moderation">Moderation</a>{% endif %}
