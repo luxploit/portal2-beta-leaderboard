@@ -30,6 +30,7 @@ def test_public_pages_render_with_current_starlette():
         assert response.status_code == 200
         assert "text/html" in response.headers["content-type"]
         assert "Portal 2" in response.text
+        assert '<meta property="og:title"' in response.text
 
 
 def test_category_rules_are_rendered_from_markdown(monkeypatch, tmp_path):

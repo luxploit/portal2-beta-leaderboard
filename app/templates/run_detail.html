@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}Run #{{ run.id }} · {{ app_name }}{% endblock %}
+{% block social_meta %}{% if run.status == 'approved' %}<meta property="og:title" content="{{ self.title()|striptags|forceescape }}">{% endif %}{% endblock %}
 {% block content %}
 <div class="run-title">
   <div>

@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% block title %}{{ app_name }}{% endblock %}
+{% block social_meta %}<meta property="og:title" content="{{ self.title()|striptags|forceescape }}">{% endblock %}
 {% block content %}
 <div class="build-list">
   {% for build in builds %}

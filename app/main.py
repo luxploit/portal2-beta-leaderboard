@@ -3,7 +3,7 @@ from __future__ import annotations
 import sqlite3
 import tempfile
 import time
-from contextlib import asynccontextmanager
+from contextlib import asynccontextmanager, closing
 from datetime import datetime
 from pathlib import Path
 
@@ -978,7 +978,9 @@ def download_database_snapshot(
     snapshot_path = Path(temporary_file.name)
     temporary_file.close()
     try:
-        with sqlite3.connect(database_path) as source, sqlite3.connect(snapshot_path) as destination:
+        with closing(sqlite3.connect(database_path)) as source, closing(
+            sqlite3.connect(snapshot_path)
+        ) as destination:
             source.backup(destination)
     except sqlite3.Error as exc:
         snapshot_path.unlink(missing_ok=True)
