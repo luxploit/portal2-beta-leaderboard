@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}{{ app_name }}{% endblock %}
+{% block content %}
+<nav class="category-list" aria-label="Categories">
+  {% for category in categories %}
+    <a href="/category/{{ category.slug }}">{{ category.name }}</a>
+  {% endfor %}
+</nav>
+{% endblock %}

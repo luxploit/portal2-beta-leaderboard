@@ -1,0 +1,54 @@
+from __future__ import annotations
+
+import os
+from dataclasses import dataclass
+from pathlib import Path
+
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
+
+@dataclass(frozen=True)
+class Settings:
+    app_name: str
+    base_url: str
+    discord_client_id: str
+    discord_client_secret: str
+    discord_redirect_uri: str
+    owner_discord_id: str
+    session_secret: str
+    database_url: str
+    cookie_secure: bool
+
+
+def _env_bool(name: str, default: bool = False) -> bool:
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def load_settings() -> Settings:
+    base_url = os.getenv("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
+    redirect_uri = os.getenv("DISCORD_REDIRECT_URI", f"{base_url}/auth/callback")
+    database_url = os.getenv("DATABASE_URL", "sqlite:///./data/portal2_runs.db")
+
+    if database_url.startswith("sqlite:///./data/"):
+        Path("data").mkdir(parents=True, exist_ok=True)
+
+    return Settings(
+        app_name=os.getenv("APP_NAME", "Portal 2 Runs"),
+        base_url=base_url,
+        discord_client_id=os.getenv("DISCORD_CLIENT_ID", ""),
+        discord_client_secret=os.getenv("DISCORD_CLIENT_SECRET", ""),
+        discord_redirect_uri=redirect_uri,
+        owner_discord_id=os.getenv("OWNER_DISCORD_ID", ""),
+        session_secret=os.getenv("SESSION_SECRET", "dev-only-change-me"),
+        database_url=database_url,
+        cookie_secure=_env_bool("COOKIE_SECURE", False),
+    )
+
+
+settings = load_settings()
