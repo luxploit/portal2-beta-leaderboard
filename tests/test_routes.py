@@ -1,6 +1,7 @@
 import base64
 import json
 import os
+import re
 
 from fastapi.testclient import TestClient
 from itsdangerous import TimestampSigner
@@ -82,6 +83,59 @@ def test_missing_category_uses_html_error_template():
         response = client.get("/category/not-a-category")
         assert response.status_code == 404
         assert "Category not found" in response.text
+
+
+def test_category_can_show_obsoleted_runs_without_changing_places():
+    with TestClient(app) as client:
+        with SessionLocal() as db:
+            category = Category(slug="obsolete-test", name="Obsolete Test")
+            other_category = Category(slug="obsolete-other", name="Obsolete Other")
+            first = User(discord_id="obsolete-first", username="First")
+            second = User(discord_id="obsolete-second", username="Second")
+            db.add_all([category, other_category, first, second])
+            db.flush()
+            submitted_at = utcnow()
+            runs = [
+                Run(runner=first, category=category, time_ms=1000, status="approved"),
+                Run(runner=first, category=category, time_ms=1000, status="approved"),
+                Run(runner=first, category=category, time_ms=1500, status="approved"),
+                Run(runner=second, category=category, time_ms=2000, status="approved"),
+                Run(runner=first, category=category, time_ms=500, status="pending"),
+                Run(runner=second, category=category, time_ms=600, status="rejected"),
+                Run(runner=first, category=other_category, time_ms=700, status="approved"),
+            ]
+            for run in runs:
+                run.video_url = "https://example.com/video"
+                run.submitted_at = submitted_at
+            db.add_all(runs)
+            db.commit()
+            ids = [run.id for run in runs]
+
+        for query, expected, checked in [
+            ("", [ids[0], ids[3]], False),
+            ("?show_obsolete=true", ids[:4], True),
+            ("?show_obsolete=false", [ids[0], ids[3]], False),
+        ]:
+            response = client.get(f"/category/obsolete-test{query}")
+            assert response.status_code == 200
+            assert [int(id_) for id_ in re.findall(r'href="/runs/(\d+)"', response.text)] == expected
+            assert ('aria-pressed="true"' in response.text) == checked
+            rows = re.findall(r"<tr>(.*?)</tr>", response.text, re.S)
+            for run_id, place in [(ids[0], "1st"), (ids[3], "2nd")]:
+                row = next(row for row in rows if f'href="/runs/{run_id}"' in row)
+                assert f"<td>{place}</td>" in row
+            assert response.text.count('aria-label="Obsoleted run"') == (2 if checked else 0)
+
+
+def test_empty_category_keeps_obsoleted_runs_option():
+    with TestClient(app) as client:
+        with SessionLocal() as db:
+            db.add(Category(slug="obsolete-empty", name="Obsolete Empty"))
+            db.commit()
+        response = client.get("/category/obsolete-empty?show_obsolete=true")
+        assert response.status_code == 200
+        assert "No runs yet." in response.text
+        assert 'aria-pressed="true"' in response.text
 
 
 def test_protected_page_uses_html_error_template_when_signed_out():

@@ -242,18 +242,20 @@ def template_context(request: Request, db: Session, **extra) -> dict:
     }
 
 
-def best_approved_runs(db: Session, category_id: int, limit: int | None = None) -> list[Run]:
+def best_approved_runs(
+    db: Session, category_id: int, limit: int | None = None, *, show_obsolete: bool = False
+) -> list[Run]:
     runs = db.scalars(
         select(Run)
         .options(joinedload(Run.runner), joinedload(Run.category))
         .where(Run.category_id == category_id, Run.status == "approved")
-        .order_by(Run.time_ms.asc(), Run.submitted_at.asc())
+        .order_by(Run.time_ms.asc(), Run.submitted_at.asc(), Run.id.asc())
     ).all()
 
     best: list[Run] = []
     seen_users: set[int] = set()
     for run in runs:
-        if run.user_id in seen_users:
+        if run.user_id in seen_users and not show_obsolete:
             continue
         seen_users.add(run.user_id)
         best.append(run)
@@ -329,14 +331,25 @@ def about_page(request: Request, db: Session = Depends(get_db)):
 
 
 @app.get("/category/{slug}", response_class=HTMLResponse)
-def category_page(slug: str, request: Request, db: Session = Depends(get_db)):
+def category_page(
+    slug: str, request: Request, show_obsolete: bool = False, db: Session = Depends(get_db)
+):
     category = db.scalar(select(Category).where(Category.slug == slug))
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found.")
-    runs = best_approved_runs(db, category.id)
+    runs = best_approved_runs(db, category.id, show_obsolete=show_obsolete)
+    places = {}
+    seen_users = set()
+    for run in runs:
+        if run.user_id not in seen_users:
+            seen_users.add(run.user_id)
+            places[run.id] = len(seen_users)
     return render_template(
         "category.html",
-        template_context(request, db, category=category, runs=runs),
+        template_context(
+            request, db, category=category, runs=runs,
+            places=places, show_obsolete=show_obsolete,
+        ),
     )
 
 

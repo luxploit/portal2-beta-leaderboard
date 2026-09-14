@@ -4,7 +4,14 @@
 {% block content %}
 <div class="title-row">
   <div><p class="eyebrow">{{ category.build_name }}</p><h1>{{ category.display_name }}</h1></div>
-  <a href="/category/{{ category.slug }}/rules">Category rules</a>
+  <div class="category-actions">
+    <form method="get" action="/category/{{ category.slug }}">
+      <button class="obsolete-toggle" type="submit" name="show_obsolete" value="{{ 'false' if show_obsolete else 'true' }}" aria-pressed="{{ 'true' if show_obsolete else 'false' }}" aria-label="Show obsoleted runs" title="{{ 'Hide' if show_obsolete else 'Show' }} obsoleted runs">
+        <span class="history-icon" aria-hidden="true"></span>
+      </button>
+    </form>
+    <a href="/category/{{ category.slug }}/rules">Category rules</a>
+  </div>
 </div>
 {% if runs %}
 <div class="table-wrap">
@@ -13,7 +20,7 @@
     <tbody>
     {% for run in runs %}
       <tr>
-        <td>{{ loop.index|ordinal }}</td>
+        <td>{% if run.id in places %}{{ places[run.id]|ordinal }}{% else %}<span class="history-icon muted" role="img" aria-label="Obsoleted run" title="Obsoleted run"></span>{% endif %}</td>
         <td><a href="/users/{{ run.runner.discord_id }}">{{ run.runner.display_name }}</a></td>
         <td class="time"><a href="/runs/{{ run.id }}">{{ run.time_ms|runtime }}</a></td>
         <td>{{ run.submitted_at.strftime('%Y-%m-%d') }}</td>
