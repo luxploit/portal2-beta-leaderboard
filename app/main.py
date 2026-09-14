@@ -105,7 +105,6 @@ BUILD_SEED = [
     # },
 ]
 
-
 def seed_categories() -> None:
     with SessionLocal() as db:
         for build_order, build in enumerate(BUILD_SEED, start=1):
@@ -125,13 +124,11 @@ def seed_categories() -> None:
                 category.rules_file = seed["rules_file"]
         db.commit()
 
-
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(engine)
     seed_categories()
     yield
-
 
 app = FastAPI(
     title=settings.app_name,
@@ -140,6 +137,7 @@ app = FastAPI(
     redoc_url=None,
     openapi_url=None,
 )
+
 app.add_middleware(
     SessionMiddleware,
     secret_key=settings.session_secret,
@@ -148,67 +146,63 @@ app.add_middleware(
     same_site="lax",
     https_only=settings.cookie_secure,
 )
+
 app.mount("/static", StaticFiles(directory=BASE_DIR / "static"), name="static")
 templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.filters["runtime"] = format_time
 templates.env.filters["ordinal"] = ordinal
 templates.env.filters["bio_markdown"] = render_bio
 
-
 def render_template(name: str, context: dict, *, status_code: int = 200):
     """Render a Jinja template using Starlette's current request-first API."""
-    request = context["request"]
     return templates.TemplateResponse(
-        request=request,
+        request=context["request"],
         name=name,
         context=context,
         status_code=status_code,
     )
 
-
 def get_current_user(request: Request, db: Session) -> User | None:
     user_id = request.session.get("user_id")
     if not user_id:
         return None
+    
     return db.get(User, int(user_id))
-
 
 def is_owner(user: User | None) -> bool:
     return bool(user and settings.owner_discord_id and user.discord_id == settings.owner_discord_id)
 
-
 def is_moderator(user: User | None) -> bool:
     return bool(user and (user.is_moderator or is_owner(user)))
-
 
 def require_user(request: Request, db: Session) -> User:
     user = get_current_user(request, db)
     if user is None:
         raise HTTPException(status_code=401, detail="Sign in with Discord to continue.")
+    
     return user
-
 
 def require_moderator(request: Request, db: Session) -> User:
     user = require_user(request, db)
     if not is_moderator(user):
         raise HTTPException(status_code=403, detail="Moderator access required.")
+    
     return user
-
 
 def require_owner(request: Request, db: Session) -> User:
     user = require_user(request, db)
     if not is_owner(user):
         raise HTTPException(status_code=403, detail="Owner access required.")
+    
     return user
-
 
 def flash(request: Request, message: str, kind: str = "info") -> None:
     request.session["flash"] = {"message": message, "kind": kind}
 
-
 def discord_avatar_url(user: User | None) -> str | None:
     if user is None:
         return None
+    
     if user.avatar_hash:
         extension = "gif" if user.avatar_hash.startswith("a_") else "png"
         return (
@@ -219,12 +213,13 @@ def discord_avatar_url(user: User | None) -> str | None:
         default_avatar = (int(user.discord_id) >> 22) % 6
     except ValueError:
         default_avatar = 0
+        
     return f"https://cdn.discordapp.com/embed/avatars/{default_avatar}.png"
-
 
 def template_context(request: Request, db: Session, **extra) -> dict:
     current_user = get_current_user(request, db)
     flash_message = request.session.pop("flash", None)
+    
     return {
         "request": request,
         "app_name": settings.app_name,
@@ -240,7 +235,6 @@ def template_context(request: Request, db: Session, **extra) -> dict:
         "flash": flash_message,
         **extra,
     }
-
 
 def best_approved_runs(
     db: Session, category_id: int, limit: int | None = None, *, show_obsolete: bool = False
@@ -263,7 +257,6 @@ def best_approved_runs(
             break
     return best
 
-
 def audit_run_event(
     db: Session,
     action: str,
@@ -277,6 +270,7 @@ def audit_run_event(
     """Store immutable display snapshots so deleted runs remain auditable."""
     runner = runner or run.runner
     category = category or run.category
+    
     db.add(
         AuditLog(
             action=action,
@@ -291,12 +285,12 @@ def audit_run_event(
         )
     )
 
-
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, db: Session = Depends(get_db)):
     categories = db.scalars(
         select(Category).order_by(Category.build_order, Category.display_order)
     ).all()
+    
     builds = []
     for build in BUILD_SEED:
         build_categories = [category for category in categories if category.build_slug == build["slug"]]
@@ -307,11 +301,11 @@ def home(request: Request, db: Session = Depends(get_db)):
                 "categories": build_categories,
             }
         )
+        
     return render_template(
         "home.html",
         template_context(request, db, builds=builds),
     )
-
 
 @app.get("/about", response_class=HTMLResponse)
 def about_page(request: Request, db: Session = Depends(get_db)):
@@ -320,6 +314,7 @@ def about_page(request: Request, db: Session = Depends(get_db)):
             User.is_moderator.is_(True) | (User.discord_id == settings.owner_discord_id)
         ).order_by(User.username.asc())
     ).all()
+    
     return render_template(
         "about.html",
         template_context(
@@ -329,7 +324,6 @@ def about_page(request: Request, db: Session = Depends(get_db)):
         ),
     )
 
-
 @app.get("/category/{slug}", response_class=HTMLResponse)
 def category_page(
     slug: str, request: Request, show_obsolete: bool = False, db: Session = Depends(get_db)
@@ -337,13 +331,16 @@ def category_page(
     category = db.scalar(select(Category).where(Category.slug == slug))
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found.")
+    
     runs = best_approved_runs(db, category.id, show_obsolete=show_obsolete)
     places = {}
     seen_users = set()
+    
     for run in runs:
         if run.user_id not in seen_users:
             seen_users.add(run.user_id)
             places[run.id] = len(seen_users)
+            
     return render_template(
         "category.html",
         template_context(
@@ -351,7 +348,6 @@ def category_page(
             places=places, show_obsolete=show_obsolete,
         ),
     )
-
 
 @app.get("/category/{slug}/rules", response_class=HTMLResponse)
 def category_rules(slug: str, request: Request, db: Session = Depends(get_db)):
@@ -375,11 +371,9 @@ def category_rules(slug: str, request: Request, db: Session = Depends(get_db)):
         template_context(request, db, category=category, rules_html=rules_html),
     )
 
-
 @app.get("/auth/login")
 def login(request: Request):
     return RedirectResponse(build_discord_authorize_url(request), status_code=status.HTTP_302_FOUND)
-
 
 @app.get("/auth/callback")
 async def auth_callback(
@@ -424,14 +418,16 @@ async def auth_callback(
 def pending_discord_signup(request: Request) -> dict:
     profile = request.session.get("pending_discord_signup")
     started_at = request.session.get("pending_discord_signup_started_at")
+    
     if not isinstance(profile, dict) or not isinstance(started_at, int):
         raise HTTPException(status_code=400, detail="No Discord sign-up is pending.")
+    
     if int(time.time()) - started_at > 10 * 60:
         request.session.pop("pending_discord_signup", None)
         request.session.pop("pending_discord_signup_started_at", None)
         raise HTTPException(status_code=400, detail="Discord sign-up expired. Please start again.")
+    
     return profile
-
 
 @app.get("/auth/verify", response_class=HTMLResponse)
 def signup_verification(request: Request, db: Session = Depends(get_db)):
@@ -441,7 +437,6 @@ def signup_verification(request: Request, db: Session = Depends(get_db)):
         template_context(request, db, errors=[]),
     )
 
-
 @app.post("/auth/verify", response_class=HTMLResponse)
 def complete_signup_verification(
     request: Request,
@@ -450,6 +445,7 @@ def complete_signup_verification(
     db: Session = Depends(get_db),
 ):
     verify_csrf(request, csrf_token)
+    
     profile = pending_discord_signup(request)
     if not verify_turnstile(cf_turnstile_response, "discord_signup"):
         return render_template(
@@ -467,9 +463,9 @@ def complete_signup_verification(
     request.session.pop("pending_discord_signup_started_at", None)
     request.session["user_id"] = user.id
     request.session.pop("csrf_token", None)
+    
     flash(request, f"Sign-up complete. Signed in as {user.display_name}.", "success")
     return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
-
 
 @app.post("/auth/logout")
 def logout(request: Request, csrf_token: str = Form(...)):
@@ -477,18 +473,18 @@ def logout(request: Request, csrf_token: str = Form(...)):
     request.session.clear()
     return RedirectResponse("/", status_code=status.HTTP_303_SEE_OTHER)
 
-
 @app.get("/submit", response_class=HTMLResponse)
 def submit_form(request: Request, db: Session = Depends(get_db)):
     require_user(request, db)
+    
     categories = db.scalars(
         select(Category).order_by(Category.build_order, Category.display_order)
     ).all()
+    
     return render_template(
         "submit.html",
         template_context(request, db, categories=categories, values={}, errors=[]),
     )
-
 
 @app.post("/submit", response_class=HTMLResponse)
 def submit_run(
@@ -502,21 +498,25 @@ def submit_run(
     cf_turnstile_response: str = Form("", alias="cf-turnstile-response"),
     db: Session = Depends(get_db),
 ):
-    user = require_user(request, db)
     verify_csrf(request, csrf_token)
+    
+    user = require_user(request, db)
     categories = db.scalars(
         select(Category).order_by(Category.build_order, Category.display_order)
     ).all()
+    
     category = db.get(Category, category_id)
     errors: list[str] = []
 
     if category is None:
         errors.append("Choose a valid category.")
+        
     try:
         time_ms = parse_time_to_ms(run_time)
     except ValueError as exc:
         time_ms = 0
         errors.append(str(exc))
+        
     try:
         clean_video_url = validate_video_url(video_url)
     except ValueError as exc:
@@ -557,22 +557,23 @@ def submit_run(
     )
     db.add(run)
     db.flush()
+    
     audit_run_event(db, "submitted", user, run, runner=user, category=category)
     db.commit()
     db.refresh(run)
+    
     flash(request, "Run submitted for moderator review.", "success")
     background_tasks.add_task(
         notify_moderation, run.id, user.display_name,
         f"{category.build_name} · {category.display_name}", run.time_ms,
     )
+    
     return RedirectResponse(f"/runs/{run.id}", status_code=status.HTTP_303_SEE_OTHER)
-
 
 @app.get("/me", response_class=HTMLResponse)
 def own_profile_redirect(request: Request, db: Session = Depends(get_db)):
     user = require_user(request, db)
     return RedirectResponse(f"/users/{user.discord_id}", status_code=status.HTTP_303_SEE_OTHER)
-
 
 @app.get("/users/{discord_id}", response_class=HTMLResponse)
 def user_profile(discord_id: str, request: Request, db: Session = Depends(get_db)):
@@ -581,19 +582,25 @@ def user_profile(discord_id: str, request: Request, db: Session = Depends(get_db
         .options(joinedload(User.profile))
         .where(User.discord_id == discord_id)
     )
+    
     if user is None:
         raise HTTPException(status_code=404, detail="Runner not found.")
+    
     current_user = get_current_user(request, db)
     own_profile = bool(current_user and current_user.id == user.id)
     run_query = select(Run).options(joinedload(Run.category)).where(Run.user_id == user.id)
+    
     if not own_profile:
         run_query = run_query.where(Run.status == "approved")
+        
     runs = db.scalars(
         run_query.order_by(Run.submitted_at.desc())
     ).all()
+    
     color = user.profile.background_color if user.profile else "slate"
     if color not in PROFILE_COLOR_VALUES:
         color = "slate"
+        
     return render_template(
         "user_profile.html",
         template_context(
@@ -609,11 +616,11 @@ def user_profile(discord_id: str, request: Request, db: Session = Depends(get_db
         ),
     )
 
-
 @app.get("/me/profile", response_class=HTMLResponse)
 def edit_own_profile_form(request: Request, db: Session = Depends(get_db)):
     user = require_user(request, db)
     profile = db.get(UserProfile, user.id)
+    
     return render_template(
         "edit_profile.html",
         template_context(
@@ -629,7 +636,6 @@ def edit_own_profile_form(request: Request, db: Session = Depends(get_db)):
         ),
     )
 
-
 @app.post("/me/profile", response_class=HTMLResponse)
 def edit_own_profile(
     request: Request,
@@ -638,10 +644,12 @@ def edit_own_profile(
     csrf_token: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    user = require_user(request, db)
     verify_csrf(request, csrf_token)
+    
+    user = require_user(request, db)
     clean_bio = bio.strip()
     errors: list[str] = []
+    
     if len(clean_bio) > 500:
         errors.append("Bio must be 500 characters or fewer.")
     if background_color not in PROFILE_COLOR_VALUES:
@@ -664,12 +672,13 @@ def edit_own_profile(
     if profile is None:
         profile = UserProfile(user_id=user.id)
         db.add(profile)
+        
     profile.bio = clean_bio
     profile.background_color = background_color
     db.commit()
+    
     flash(request, "Profile updated.", "success")
     return RedirectResponse(f"/users/{user.discord_id}", status_code=status.HTTP_303_SEE_OTHER)
-
 
 @app.get("/runs/{run_id}", response_class=HTMLResponse)
 def run_detail(run_id: int, request: Request, db: Session = Depends(get_db)):
@@ -689,7 +698,6 @@ def run_detail(run_id: int, request: Request, db: Session = Depends(get_db)):
 
     return render_template("run_detail.html", template_context(request, db, run=run))
 
-
 @app.post("/runs/{run_id}/delete")
 def delete_run(
     run_id: int,
@@ -698,14 +706,15 @@ def delete_run(
     return_to: str = Form("category"),
     db: Session = Depends(get_db),
 ):
-    moderator = require_moderator(request, db)
     verify_csrf(request, csrf_token)
-
+    
+    moderator = require_moderator(request, db)
     run = db.scalar(
         select(Run)
         .options(joinedload(Run.category))
         .where(Run.id == run_id)
     )
+    
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found.")
 
@@ -725,7 +734,6 @@ def delete_run(
     destination = "/moderation" if return_to == "moderation" else f"/category/{category_slug}"
     return RedirectResponse(destination, status_code=status.HTTP_303_SEE_OTHER)
 
-
 @app.get("/moderation", response_class=HTMLResponse)
 def moderation(request: Request, db: Session = Depends(get_db)):
     require_moderator(request, db)
@@ -735,11 +743,11 @@ def moderation(request: Request, db: Session = Depends(get_db)):
         .where(Run.status == "pending")
         .order_by(Run.submitted_at.asc())
     ).all()
+    
     return render_template(
         "moderation.html",
         template_context(request, db, pending_runs=pending_runs),
     )
-
 
 @app.get("/moderation/runs/add", response_class=HTMLResponse)
 def add_run_as_moderator_form(request: Request, db: Session = Depends(get_db)):
@@ -751,7 +759,6 @@ def add_run_as_moderator_form(request: Request, db: Session = Depends(get_db)):
         "moderation_add_run.html",
         template_context(request, db, categories=categories, values={}, errors=[]),
     )
-
 
 @app.get("/moderation/runs/{run_id}/edit", response_class=HTMLResponse)
 def edit_run_as_moderator_form(
@@ -765,11 +772,14 @@ def edit_run_as_moderator_form(
         .options(joinedload(Run.runner), joinedload(Run.category))
         .where(Run.id == run_id)
     )
+    
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found.")
+    
     categories = db.scalars(
         select(Category).order_by(Category.build_order, Category.display_order)
     ).all()
+    
     return render_template(
         "moderation_edit_run.html",
         template_context(
@@ -804,13 +814,15 @@ def edit_run_as_moderator(
     csrf_token: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    moderator = require_moderator(request, db)
     verify_csrf(request, csrf_token)
+    
+    moderator = require_moderator(request, db)
     run = db.scalar(
         select(Run)
         .options(joinedload(Run.runner), joinedload(Run.category))
         .where(Run.id == run_id)
     )
+    
     if run is None:
         raise HTTPException(status_code=404, detail="Run not found.")
 
@@ -828,16 +840,19 @@ def edit_run_as_moderator(
         errors.append("Temporary display name must be 80 characters or fewer.")
     if category is None:
         errors.append("Choose a valid category.")
+        
     try:
         time_ms = parse_time_to_ms(run_time)
     except ValueError as exc:
         time_ms = 0
         errors.append(str(exc))
+        
     try:
         clean_video_url = validate_video_url(video_url)
     except ValueError as exc:
         clean_video_url = video_url.strip()
         errors.append(str(exc))
+        
     if len(clean_notes) > 2000:
         errors.append("Notes must be 2,000 characters or fewer.")
 
@@ -849,6 +864,7 @@ def edit_run_as_moderator(
         "video_url": video_url,
         "notes": notes,
     }
+    
     if errors:
         categories = db.scalars(
             select(Category).order_by(Category.build_order, Category.display_order)
@@ -907,6 +923,7 @@ def edit_run_as_moderator(
     run.time_ms = time_ms
     run.video_url = clean_video_url
     run.notes = clean_notes
+    
     if changes:
         audit_run_event(
             db,
@@ -921,11 +938,13 @@ def edit_run_as_moderator(
     else:
         flash(request, f"No changes made to run #{run.id}.", "info")
     db.commit()
+    
     if changes and run.status == "pending":
         background_tasks.add_task(
             notify_moderation, run.id, runner.display_name,
             f"{category.build_name} · {category.display_name}", run.time_ms, True,
         )
+        
     return RedirectResponse(f"/runs/{run.id}", status_code=status.HTTP_303_SEE_OTHER)
 
 
@@ -941,9 +960,9 @@ def add_run_as_moderator(
     csrf_token: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    moderator = require_moderator(request, db)
     verify_csrf(request, csrf_token)
-
+    
+    moderator = require_moderator(request, db)
     clean_discord_id = discord_id.strip()
     clean_display_name = temporary_display_name.strip()
     clean_notes = notes.strip()
@@ -958,16 +977,19 @@ def add_run_as_moderator(
         errors.append("Temporary display name must be 80 characters or fewer.")
     if category is None:
         errors.append("Choose a valid category.")
+        
     try:
         time_ms = parse_time_to_ms(run_time)
     except ValueError as exc:
         time_ms = 0
         errors.append(str(exc))
+        
     try:
         clean_video_url = validate_video_url(video_url)
     except ValueError as exc:
         clean_video_url = video_url.strip()
         errors.append(str(exc))
+        
     if len(clean_notes) > 2000:
         errors.append("Notes must be 2,000 characters or fewer.")
 
@@ -1014,6 +1036,7 @@ def add_run_as_moderator(
     )
     db.add(run)
     db.flush()
+    
     audit_run_event(
         db,
         "added_manually",
@@ -1026,8 +1049,8 @@ def add_run_as_moderator(
     db.commit()
     db.refresh(run)
     flash(request, f"Run #{run.id} added for {runner.display_name}.", "success")
+    
     return RedirectResponse(f"/runs/{run.id}", status_code=status.HTTP_303_SEE_OTHER)
-
 
 def _get_pending_run(db: Session, run_id: int) -> Run:
     run = db.get(Run, run_id)
@@ -1037,7 +1060,6 @@ def _get_pending_run(db: Session, run_id: int) -> Run:
         raise HTTPException(status_code=409, detail="This run has already been reviewed.")
     return run
 
-
 @app.post("/moderation/{run_id}/approve")
 def approve_run(
     run_id: int,
@@ -1045,18 +1067,20 @@ def approve_run(
     csrf_token: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    moderator = require_moderator(request, db)
     verify_csrf(request, csrf_token)
+    
+    moderator = require_moderator(request, db)
     run = _get_pending_run(db, run_id)
     run.status = "approved"
     run.reviewed_at = utcnow()
     run.reviewed_by_user_id = moderator.id
     run.rejection_reason = None
+    
     audit_run_event(db, "approved", moderator, run)
     db.commit()
+    
     flash(request, f"Run #{run.id} approved.", "success")
     return RedirectResponse("/moderation", status_code=status.HTTP_303_SEE_OTHER)
-
 
 @app.post("/moderation/{run_id}/reject")
 def reject_run(
@@ -1066,8 +1090,9 @@ def reject_run(
     csrf_token: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    moderator = require_moderator(request, db)
     verify_csrf(request, csrf_token)
+    
+    moderator = require_moderator(request, db)
     reason = rejection_reason.strip()
     if len(reason) > 500:
         raise HTTPException(status_code=422, detail="Rejection reason must be 500 characters or fewer.")
@@ -1077,11 +1102,12 @@ def reject_run(
     run.reviewed_at = utcnow()
     run.reviewed_by_user_id = moderator.id
     run.rejection_reason = reason or "No reason provided."
+    
     audit_run_event(db, "rejected", moderator, run, details=run.rejection_reason)
     db.commit()
+    
     flash(request, f"Run #{run.id} rejected.", "info")
     return RedirectResponse("/moderation", status_code=status.HTTP_303_SEE_OTHER)
-
 
 @app.get("/owner/mods", response_class=HTMLResponse)
 def owner_mods(request: Request, db: Session = Depends(get_db)):
@@ -1092,7 +1118,6 @@ def owner_mods(request: Request, db: Session = Depends(get_db)):
         template_context(request, db, users=users),
     )
 
-
 @app.get("/owner/audit-log", response_class=HTMLResponse)
 def owner_audit_log(request: Request, db: Session = Depends(get_db)):
     require_owner(request, db)
@@ -1102,21 +1127,22 @@ def owner_audit_log(request: Request, db: Session = Depends(get_db)):
         template_context(request, db, entries=entries),
     )
 
-
 @app.post("/owner/database/download")
 def download_database_snapshot(
     request: Request,
     csrf_token: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    require_owner(request, db)
     verify_csrf(request, csrf_token)
+    
+    require_owner(request, db)
     if engine.url.get_backend_name() != "sqlite":
         raise HTTPException(status_code=501, detail="Database snapshots require SQLite.")
 
     database_path_value = engine.url.database
     if not database_path_value or database_path_value == ":memory:":
         raise HTTPException(status_code=503, detail="The SQLite database is not stored on disk.")
+    
     database_path = Path(database_path_value).resolve()
     if not database_path.is_file():
         raise HTTPException(status_code=503, detail="The SQLite database file was not found.")
@@ -1128,6 +1154,7 @@ def download_database_snapshot(
     )
     snapshot_path = Path(temporary_file.name)
     temporary_file.close()
+    
     try:
         with closing(sqlite3.connect(database_path)) as source, closing(
             sqlite3.connect(snapshot_path)
@@ -1145,7 +1172,6 @@ def download_database_snapshot(
         background=BackgroundTask(snapshot_path.unlink, missing_ok=True),
     )
 
-
 @app.post("/owner/mods/add")
 def add_mod(
     request: Request,
@@ -1153,11 +1179,14 @@ def add_mod(
     csrf_token: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    require_owner(request, db)
     verify_csrf(request, csrf_token)
+    
+    require_owner(request, db)
+    
     discord_id = discord_id.strip()
     if not discord_id.isdigit() or not 15 <= len(discord_id) <= 25:
         raise HTTPException(status_code=422, detail="Enter a valid numeric Discord user ID.")
+    
     if discord_id == settings.owner_discord_id:
         flash(request, "The owner already has moderator access.", "info")
         return RedirectResponse("/owner/mods", status_code=status.HTTP_303_SEE_OTHER)
@@ -1168,10 +1197,11 @@ def add_mod(
         db.add(user)
     else:
         user.is_moderator = True
+        
     db.commit()
     flash(request, f"Moderator access enabled for Discord ID {discord_id}.", "success")
+    
     return RedirectResponse("/owner/mods", status_code=status.HTTP_303_SEE_OTHER)
-
 
 @app.post("/owner/mods/{user_id}/remove")
 def remove_mod(
@@ -1180,8 +1210,9 @@ def remove_mod(
     csrf_token: str = Form(...),
     db: Session = Depends(get_db),
 ):
-    require_owner(request, db)
     verify_csrf(request, csrf_token)
+    
+    require_owner(request, db)
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
@@ -1189,9 +1220,9 @@ def remove_mod(
         raise HTTPException(status_code=400, detail="The owner cannot be demoted.")
     user.is_moderator = False
     db.commit()
+    
     flash(request, f"Moderator access removed from {user.display_name}.", "success")
     return RedirectResponse("/owner/mods", status_code=status.HTTP_303_SEE_OTHER)
-
 
 @app.exception_handler(HTTPException)
 def http_exception_handler(request: Request, exc: HTTPException):

@@ -7,10 +7,8 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
 
-
 def utcnow() -> datetime:
     return datetime.now(timezone.utc)
-
 
 class User(Base):
     __tablename__ = "users"
@@ -39,7 +37,6 @@ class User(Base):
     def display_name(self) -> str:
         return self.global_name or self.username or self.discord_id
 
-
 class UserProfile(Base):
     __tablename__ = "user_profiles"
 
@@ -52,7 +49,6 @@ class UserProfile(Base):
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
     user: Mapped[User] = relationship(back_populates="profile")
-
 
 class Category(Base):
     __tablename__ = "categories"
@@ -73,7 +69,6 @@ class Category(Base):
     @property
     def display_name(self) -> str:
         return self.short_name or self.name
-
 
 class Run(Base):
     __tablename__ = "runs"
@@ -97,7 +92,6 @@ class Run(Base):
     runner: Mapped[User] = relationship(back_populates="runs", foreign_keys=[user_id])
     category: Mapped[Category] = relationship(back_populates="runs")
     reviewed_by: Mapped[User | None] = relationship(foreign_keys=[reviewed_by_user_id])
-
 
 class AuditLog(Base):
     __tablename__ = "audit_logs"

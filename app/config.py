@@ -6,9 +6,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-
 load_dotenv()
-
 
 @dataclass(frozen=True)
 class Settings:
@@ -25,13 +23,11 @@ class Settings:
     turnstile_secret_key: str
     discord_moderation_webhook_url: str = ""
 
-
 def _env_bool(name: str, default: bool = False) -> bool:
     value = os.getenv(name)
     if value is None:
         return default
     return value.strip().lower() in {"1", "true", "yes", "on"}
-
 
 def load_settings() -> Settings:
     base_url = os.getenv("BASE_URL", "http://127.0.0.1:8000").rstrip("/")
@@ -55,6 +51,5 @@ def load_settings() -> Settings:
         turnstile_secret_key=os.getenv("TURNSTILE_SECRET_KEY", ""),
         discord_moderation_webhook_url=os.getenv("DISCORD_MODERATION_WEBHOOK_URL", ""),
     )
-
 
 settings = load_settings()
