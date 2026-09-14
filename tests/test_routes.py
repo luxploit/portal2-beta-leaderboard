@@ -14,7 +14,6 @@ import app.main as main_module
 from app.main import app
 from app.models import AuditLog, Category, Run, User, UserProfile, utcnow
 
-
 def test_public_pages_render_with_current_starlette():
     with TestClient(app) as client:
         response = client.get("/")
@@ -25,7 +24,6 @@ def test_public_pages_render_with_current_starlette():
         assert f'styles.css?v={main_module.CSS_VERSION}' in response.text
         css_response = client.get(f"/static/styles.css?v={main_module.CSS_VERSION}")
         assert css_response.status_code == 200
-
 
 def test_about_page_lists_moderators_and_owner_only():
     with TestClient(app) as client:
@@ -50,7 +48,6 @@ def test_about_page_lists_moderators_and_owner_only():
                 db.delete(user)
             db.commit()
 
-
 def test_category_rules_are_rendered_from_markdown(monkeypatch, tmp_path):
     rules_dir = tmp_path / "rules"
     rules_dir.mkdir()
@@ -72,24 +69,35 @@ def test_category_rules_are_rendered_from_markdown(monkeypatch, tmp_path):
             )
             db.commit()
 
-        response = client.get("/category/route-test-category/rules")
+        response = client.get("/route-test-build/route-test-category/rules")
         assert response.status_code == 200
         assert "<p>TBD</p>" in response.text
         assert response.text.count("<h1") == 1
 
-
 def test_missing_category_uses_html_error_template():
     with TestClient(app) as client:
-        response = client.get("/category/not-a-category")
+        response = client.get("/no-such-build/no-such-category")
         assert response.status_code == 404
         assert "Category not found" in response.text
-
+        legacy_response = client.get("/category/not-a-category")
+        assert legacy_response.status_code == 404
+        assert "Category not found" in legacy_response.text
 
 def test_category_can_show_obsoleted_runs_without_changing_places():
     with TestClient(app) as client:
         with SessionLocal() as db:
-            category = Category(slug="obsolete-test", name="Obsolete Test")
-            other_category = Category(slug="obsolete-other", name="Obsolete Other")
+            category = Category(
+                slug="obsolete-test",
+                name="Obsolete Test",
+                build_slug="obsolete-build",
+                build_name="Obsolete Build",
+            )
+            other_category = Category(
+                slug="obsolete-other",
+                name="Obsolete Other",
+                build_slug="obsolete-build",
+                build_name="Obsolete Build",
+            )
             first = User(discord_id="obsolete-first", username="First")
             second = User(discord_id="obsolete-second", username="Second")
             db.add_all([category, other_category, first, second])
@@ -116,7 +124,7 @@ def test_category_can_show_obsoleted_runs_without_changing_places():
             ("?show_obsolete=true", ids[:4], True),
             ("?show_obsolete=false", [ids[0], ids[3]], False),
         ]:
-            response = client.get(f"/category/obsolete-test{query}")
+            response = client.get(f"/obsolete-build/obsolete-test{query}")
             assert response.status_code == 200
             assert [int(id_) for id_ in re.findall(r'href="/runs/(\d+)"', response.text)] == expected
             assert ('aria-pressed="true"' in response.text) == checked
@@ -126,24 +134,106 @@ def test_category_can_show_obsoleted_runs_without_changing_places():
                 assert f"<td>{place}</td>" in row
             assert response.text.count('aria-label="Obsoleted run"') == (2 if checked else 0)
 
-
 def test_empty_category_keeps_obsoleted_runs_option():
     with TestClient(app) as client:
         with SessionLocal() as db:
-            db.add(Category(slug="obsolete-empty", name="Obsolete Empty"))
+            db.add(
+                Category(
+                    slug="obsolete-empty",
+                    name="Obsolete Empty",
+                    build_slug="obsolete-build",
+                    build_name="Obsolete Build",
+                )
+            )
             db.commit()
-        response = client.get("/category/obsolete-empty?show_obsolete=true")
+        response = client.get("/obsolete-build/obsolete-empty?show_obsolete=true")
         assert response.status_code == 200
         assert "No runs yet." in response.text
         assert 'aria-pressed="true"' in response.text
 
+def test_legacy_slug_defaults_to_build_and_category_slug():
+    assert (
+        Category(slug="nme", build_slug="july09", legacy_slug="").effective_legacy_slug
+        == "july09_nme"
+    )
+    assert (
+        Category(
+            slug="nme",
+            build_slug="july09",
+            legacy_slug="2009-no-major-exploits",
+        ).effective_legacy_slug
+        == "2009-no-major-exploits"
+    )
+    assert Category(slug="solo", build_slug="").effective_legacy_slug == "solo"
+
+def test_legacy_category_urls_redirect_to_new_urls():
+    with TestClient(app) as client:
+        with SessionLocal() as db:
+            db.add_all(
+                [
+                    Category(
+                        slug="legacy-cat",
+                        name="Legacy Test Build - Legacy Cat",
+                        short_name="Legacy Cat",
+                        build_slug="legacy-build",
+                        build_name="Legacy Test Build",
+                        legacy_slug="old-legacy-cat",
+                        rules_file="rules/unused.md",
+                    ),
+                    Category(
+                        slug="fallback-cat",
+                        name="Legacy Test Build - Fallback Cat",
+                        short_name="Fallback Cat",
+                        build_slug="legacy-build",
+                        build_name="Legacy Test Build",
+                        legacy_slug="",
+                        rules_file="rules/unused.md",
+                    ),
+                ]
+            )
+            db.commit()
+
+        response = client.get("/category/old-legacy-cat", follow_redirects=False)
+        assert response.status_code == 301
+        assert response.headers["location"] == "/legacy-build/legacy-cat"
+
+        query_response = client.get(
+            "/category/old-legacy-cat?show_obsolete=true", follow_redirects=False
+        )
+        assert query_response.status_code == 301
+        assert (
+            query_response.headers["location"]
+            == "/legacy-build/legacy-cat?show_obsolete=true"
+        )
+
+        rules_response = client.get(
+            "/category/old-legacy-cat/rules", follow_redirects=False
+        )
+        assert rules_response.status_code == 301
+        assert rules_response.headers["location"] == "/legacy-build/legacy-cat/rules"
+
+        fallback_response = client.get(
+            "/category/legacy-build_fallback-cat", follow_redirects=False
+        )
+        assert fallback_response.status_code == 301
+        assert fallback_response.headers["location"] == "/legacy-build/fallback-cat"
+
+        followed = client.get("/category/old-legacy-cat")
+        assert followed.status_code == 200
+        assert "Legacy Cat" in followed.text
+
+        with SessionLocal() as db:
+            for category in db.scalars(
+                select(Category).where(Category.build_slug == "legacy-build")
+            ):
+                db.delete(category)
+            db.commit()
 
 def test_protected_page_uses_html_error_template_when_signed_out():
     with TestClient(app) as client:
         response = client.get("/submit")
         assert response.status_code == 401
         assert "Sign in with Discord" in response.text
-
 
 def test_discord_signup_is_not_created_until_turnstile_passes(monkeypatch):
     discord_id = "222222222222222222"
@@ -206,7 +296,6 @@ def test_discord_signup_is_not_created_until_turnstile_passes(monkeypatch):
         assert user is not None
         assert user.display_name == "New Runner"
         assert user.last_login_at is not None
-
 
 def test_regular_submission_requires_turnstile(monkeypatch):
     csrf_token = "submission-csrf"
@@ -271,7 +360,6 @@ def test_regular_submission_requires_turnstile(monkeypatch):
         run = db.scalar(select(Run).where(Run.user_id == user_id))
         assert run is not None
         assert run.status == "pending"
-
 
 def test_user_can_edit_public_profile_with_preset_color():
     csrf_token = "profile-csrf"
@@ -339,7 +427,6 @@ def test_user_can_edit_public_profile_with_preset_color():
         profile = db.get(UserProfile, user_id)
         assert profile is not None
         assert profile.background_color == "purple"
-
 
 def test_moderator_can_add_run_for_placeholder_discord_user():
     csrf_token = "test-csrf-token"
