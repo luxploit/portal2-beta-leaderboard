@@ -72,7 +72,7 @@ BUILD_SEED = [
             },
             {
                 "slug": "2009-in-bounds-no-sla",
-                "name": "In Bounds No SLA",
+                "name": "Inbounds No SLA",
                 "description": "",
                 "rules_file": "rules/july-2009-852-0/in-bounds-no-sla.md",
             },
