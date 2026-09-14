@@ -66,7 +66,7 @@ BUILD_SEED = [
             },
             {
                 "slug": "2009-oob-sla",
-                "name": "OOB SLA",
+                "name": "OoB SLA",
                 "description": "",
                 "rules_file": "rules/july-2009-852-0/oob-sla.md",
             },
