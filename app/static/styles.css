@@ -365,11 +365,22 @@ button.obsolete-toggle:focus-visible {
 	mask: url("history.svg") center / contain no-repeat;
 }
 
+small {
+	padding-left: 1px;
+	font-size: 16px;
+	color: #999;
+}
+
 .category-list {
 	display: grid;
 	width: fit-content;
 	align-items: start;
 	gap: 12px;
+}
+
+.category-header {
+	padding-bottom: 10px;
+	border-bottom: 2px solid #aaa;
 }
 
 .build-list {

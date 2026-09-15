@@ -22,7 +22,7 @@
 						{% if not loop.first %}</optgroup>{% endif %}
 						<optgroup label="{{ category.build_name }}">
 					{% endif %}
-					<option value="{{ category.id }}" {% if values.category_id == category.id %}selected{% endif %}>{{ category.display_name }}</option>
+					<option value="{{ category.id }}" {% if values.category_id == category.id %}selected{% endif %}>{{ category.name }}</option>
 					{% if loop.last %}</optgroup>{% endif %}
 				{% endfor %}
 			</select>

@@ -57,20 +57,16 @@ class Category(Base):
     id: Mapped[int] = mapped_column(primary_key=True)
     slug: Mapped[str] = mapped_column(String(80), unique=None, index=True)
     legacy_slug: Mapped[str] = mapped_column(String(80), default="", index=True)
-    name: Mapped[str] = mapped_column(String(120), unique=True)
-    short_name: Mapped[str] = mapped_column(String(120), default="")
+    name: Mapped[str] = mapped_column(String(120))
     description: Mapped[str] = mapped_column(String(240), default="")
     display_order: Mapped[int] = mapped_column(Integer, default=0)
     build_slug: Mapped[str] = mapped_column(String(80), default="", index=True)
     build_name: Mapped[str] = mapped_column(String(120), default="")
+    build_version: Mapped[str] = mapped_column(String(80), default="")
     build_order: Mapped[int] = mapped_column(Integer, default=0)
     rules_file: Mapped[str] = mapped_column(String(240), default="")
 
     runs: Mapped[list["Run"]] = relationship(back_populates="category")
-
-    @property
-    def display_name(self) -> str:
-        return self.short_name or self.name
 
     @property
     def effective_legacy_slug(self) -> str:

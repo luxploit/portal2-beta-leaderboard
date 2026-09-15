@@ -60,8 +60,7 @@ def test_category_rules_are_rendered_from_markdown(monkeypatch, tmp_path):
             db.add(
                 Category(
                     slug="route-test-category",
-                    name="Route Test Build - Route Test Category",
-                    short_name="Route Test Category",
+                    name="Route Test Category",
                     build_slug="route-test-build",
                     build_name="Route Test Build",
                     rules_file="rules/category.md",
@@ -173,8 +172,7 @@ def test_legacy_category_urls_redirect_to_new_urls():
                 [
                     Category(
                         slug="legacy-cat",
-                        name="Legacy Test Build - Legacy Cat",
-                        short_name="Legacy Cat",
+                        name="Legacy Cat",
                         build_slug="legacy-build",
                         build_name="Legacy Test Build",
                         legacy_slug="old-legacy-cat",
@@ -182,8 +180,7 @@ def test_legacy_category_urls_redirect_to_new_urls():
                     ),
                     Category(
                         slug="fallback-cat",
-                        name="Legacy Test Build - Fallback Cat",
-                        short_name="Fallback Cat",
+                        name="Fallback Cat",
                         build_slug="legacy-build",
                         build_name="Legacy Test Build",
                         legacy_slug="",
@@ -316,8 +313,7 @@ def test_regular_submission_requires_turnstile(monkeypatch):
             )
             category = Category(
                 slug="submission-captcha-test-category",
-                name="CAPTCHA Test Build - Submission Category",
-                short_name="Submission Category",
+                name="Submission Category",
                 build_slug="captcha-test-build",
                 build_name="CAPTCHA Test Build",
                 rules_file="rules/unused.md",
@@ -441,8 +437,7 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
             )
             first_category = Category(
                 slug="manual-run-test-category",
-                name="Manual Test Build - First Category",
-                short_name="First Category",
+                name="First Category",
                 build_slug="manual-test-build",
                 build_name="Manual Test Build",
                 display_order=1,
@@ -450,8 +445,7 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
             )
             second_category = Category(
                 slug="edited-run-test-category",
-                name="Manual Test Build - Second Category",
-                short_name="Second Category",
+                name="Second Category",
                 build_slug="manual-test-build",
                 build_name="Manual Test Build",
                 display_order=2,

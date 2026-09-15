@@ -1,9 +1,9 @@
 {% extends "base.html" %}
-{% block title %}{{ category.display_name }} · {{ category.build_name }} · {{ app_name }}{% endblock %}
+{% block title %}{{ category.name }} · {{ category.build_name }} · {{ app_name }}{% endblock %}
 {% block social_meta %}<meta property="og:title" content="{{ self.title()|striptags|forceescape }}">{% endblock %}
 {% block content %}
 	<div class="title-row">
-		<div><p class="eyebrow">{{ category.build_name }}</p><h1>{{ category.display_name }}</h1></div>
+		<div><p class="eyebrow">{{ category.build_name }} (v{{ category.build_version }})</p><h1>{{ category.name }}</h1></div>
 		<div class="category-actions">
 			<form method="get" action="/{{ category.build_slug }}/{{ category.slug }}">
 				<button class="obsolete-toggle" type="submit" name="show_obsolete" value="{{ 'false' if show_obsolete else 'true' }}" aria-pressed="{{ 'true' if show_obsolete else 'false' }}" aria-label="Show obsoleted runs" title="{{ 'Hide' if show_obsolete else 'Show' }} obsoleted runs">
