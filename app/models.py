@@ -89,6 +89,7 @@ class Run(Base):
     category_id: Mapped[int] = mapped_column(ForeignKey("categories.id"), index=True)
     time_ms: Mapped[int] = mapped_column(Integer, index=True)
     video_url: Mapped[str] = mapped_column(String(500))
+    splits_url: Mapped[str] = mapped_column(String(500), default="")
     notes: Mapped[str] = mapped_column(Text, default="")
     status: Mapped[str] = mapped_column(String(16), default="pending", index=True)
     submitted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

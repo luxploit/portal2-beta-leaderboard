@@ -33,7 +33,16 @@ from .notifications import notify_moderation
 from .bio import render_bio
 from .security import ensure_csrf_token, verify_csrf
 from .turnstile import turnstile_enabled, verify_turnstile
-from .utils import format_time, ordinal, parse_time_to_ms, validate_video_url
+from .utils import (
+    format_time,
+    ordinal,
+    parse_time_to_ms,
+    timeago,
+    is_direct_video_url,
+    validate_optional_url,
+    validate_video_url,
+    video_embed_url,
+)
 
 BASE_DIR = Path(__file__).resolve().parent
 CSS_VERSION = sha256((BASE_DIR / "static" / "styles.css").read_bytes()).hexdigest()[:16]
@@ -178,6 +187,7 @@ templates = Jinja2Templates(directory=BASE_DIR / "templates")
 templates.env.filters["runtime"] = format_time
 templates.env.filters["ordinal"] = ordinal
 templates.env.filters["bio_markdown"] = render_bio
+templates.env.filters["timeago"] = timeago
 
 def render_template(name: str, context: dict, *, status_code: int = 200):
     """Render a Jinja template using Starlette's current request-first API."""
@@ -311,8 +321,39 @@ def audit_run_event(
         )
     )
 
+def list_moderators(db: Session) -> list[dict]:
+    """Moderators (including owners) with avatar URLs for templates."""
+    users = db.scalars(
+        select(User).where(
+            User.is_moderator.is_(True) | (User.discord_id.in_(settings.owner_discord_ids))
+        ).order_by(User.username.asc())
+    ).all()
+    return [{"user": user, "avatar_url": discord_avatar_url(user)} for user in users]
+
+def build_categories_for(db: Session, build_slug: str) -> list[Category]:
+    return db.scalars(
+        select(Category)
+        .where(Category.build_slug == build_slug)
+        .order_by(Category.display_order, Category.id)
+    ).all()
+
+def latest_runs_for(db: Session, categories: list[Category], limit: int = 10) -> list[Run]:
+    category_ids = [category.id for category in categories]
+    if not category_ids:
+        return []
+    return db.scalars(
+        select(Run)
+        .options(joinedload(Run.runner), joinedload(Run.category))
+        .where(Run.category_id.in_(category_ids), Run.status == "approved")
+        .order_by(Run.submitted_at.desc(), Run.id.desc())
+        .limit(limit)
+    ).all()
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request, db: Session = Depends(get_db)):
+    if len(BUILD_SEED) == 1:
+        return RedirectResponse(f"/{BUILD_SEED[0]['slug']}", status_code=status.HTTP_302_FOUND)
+
     categories = db.scalars(
         select(Category).order_by(Category.build_order, Category.display_order)
     ).all()
@@ -334,18 +375,12 @@ def home(request: Request, db: Session = Depends(get_db)):
 
 @app.get("/about", response_class=HTMLResponse)
 def about_page(request: Request, db: Session = Depends(get_db)):
-    moderators = db.scalars(
-        select(User).where(
-            User.is_moderator.is_(True) | (User.discord_id.in_(settings.owner_discord_ids))
-        ).order_by(User.username.asc())
-    ).all()
-
     return render_template(
         "about.html",
         template_context(
             request,
             db,
-            moderators=[{"user": user, "avatar_url": discord_avatar_url(user)} for user in moderators],
+            moderators=list_moderators(db),
         ),
     )
 
@@ -503,6 +538,7 @@ def submit_run(
     category_id: int = Form(...),
     run_time: str = Form(...),
     video_url: str = Form(...),
+    splits_url: str = Form(""),
     notes: str = Form(""),
     csrf_token: str = Form(...),
     cf_turnstile_response: str = Form("", alias="cf-turnstile-response"),
@@ -533,6 +569,12 @@ def submit_run(
         clean_video_url = video_url.strip()
         errors.append(str(exc))
 
+    try:
+        clean_splits_url = validate_optional_url(splits_url, "Splits URL")
+    except ValueError as exc:
+        clean_splits_url = splits_url.strip()
+        errors.append(str(exc))
+
     clean_notes = notes.strip()
     if len(clean_notes) > 2000:
         errors.append("Notes must be 2,000 characters or fewer.")
@@ -550,6 +592,7 @@ def submit_run(
                     "category_id": category_id,
                     "run_time": run_time,
                     "video_url": video_url,
+                    "splits_url": splits_url,
                     "notes": notes,
                 },
                 errors=errors,
@@ -562,6 +605,7 @@ def submit_run(
         category_id=category_id,
         time_ms=time_ms,
         video_url=clean_video_url,
+        splits_url=clean_splits_url,
         notes=clean_notes,
         status="pending",
     )
@@ -706,7 +750,37 @@ def run_detail(run_id: int, request: Request, db: Session = Depends(get_db)):
         if not allowed:
             raise HTTPException(status_code=404, detail="Run not found.")
 
-    return render_template("run_detail.html", template_context(request, db, run=run))
+    if run.status == "approved":
+        rank_label = "Obsoleted"
+        seen_users: set[int] = set()
+        for place, candidate in enumerate(best_approved_runs(db, run.category_id), start=1):
+            if candidate.user_id in seen_users:
+                continue
+            seen_users.add(candidate.user_id)
+            if candidate.id == run.id:
+                rank_label = ordinal(place)
+                break
+    elif run.status == "pending":
+        rank_label = "Pending review"
+    else:
+        rank_label = "—"
+
+    build_categories = build_categories_for(db, run.category.build_slug)
+    embed_parent = request.url.hostname or "localhost"
+
+    return render_template(
+        "run_detail.html",
+        template_context(
+            request,
+            db,
+            run=run,
+            rank_label=rank_label,
+            embed_url=video_embed_url(run.video_url, parent=embed_parent) if run.video_url else None,
+            direct_video_url=run.video_url if run.video_url and is_direct_video_url(run.video_url) else None,
+            latest_runs=latest_runs_for(db, build_categories),
+            moderators=list_moderators(db),
+        ),
+    )
 
 @app.post("/runs/{run_id}/delete")
 def delete_run(
@@ -802,6 +876,7 @@ def edit_run_as_moderator_form(
                 "category_id": run.category_id,
                 "run_time": format_time(run.time_ms),
                 "video_url": run.video_url,
+                "splits_url": run.splits_url,
                 "notes": run.notes,
             },
             errors=[],
@@ -819,6 +894,7 @@ def edit_run_as_moderator(
     category_id: int = Form(...),
     run_time: str = Form(...),
     video_url: str = Form(...),
+    splits_url: str = Form(""),
     notes: str = Form(""),
     csrf_token: str = Form(...),
     db: Session = Depends(get_db),
@@ -862,6 +938,12 @@ def edit_run_as_moderator(
         clean_video_url = video_url.strip()
         errors.append(str(exc))
 
+    try:
+        clean_splits_url = validate_optional_url(splits_url, "Splits URL")
+    except ValueError as exc:
+        clean_splits_url = splits_url.strip()
+        errors.append(str(exc))
+
     if len(clean_notes) > 2000:
         errors.append("Notes must be 2,000 characters or fewer.")
 
@@ -871,6 +953,7 @@ def edit_run_as_moderator(
         "category_id": category_id,
         "run_time": run_time,
         "video_url": video_url,
+        "splits_url": splits_url,
         "notes": notes,
     }
 
@@ -897,6 +980,7 @@ def edit_run_as_moderator(
     old_runner_discord_id = old_runner.discord_id
     old_time_ms = run.time_ms
     old_video_url = run.video_url
+    old_splits_url = run.splits_url
     old_notes = run.notes
 
     runner = db.scalar(select(User).where(User.discord_id == clean_discord_id))
@@ -924,6 +1008,8 @@ def edit_run_as_moderator(
         changes.append(f"Time: {format_time(old_time_ms)} to {format_time(time_ms)}.")
     if old_video_url != clean_video_url:
         changes.append("Video URL changed.")
+    if old_splits_url != clean_splits_url:
+        changes.append("Splits URL changed.")
     if old_notes != clean_notes:
         changes.append("Notes changed.")
 
@@ -931,6 +1017,7 @@ def edit_run_as_moderator(
     run.category_id = category.id
     run.time_ms = time_ms
     run.video_url = clean_video_url
+    run.splits_url = clean_splits_url
     run.notes = clean_notes
 
     if changes:
@@ -965,6 +1052,7 @@ def add_run_as_moderator(
     category_id: int = Form(...),
     run_time: str = Form(...),
     video_url: str = Form(...),
+    splits_url: str = Form(""),
     notes: str = Form(""),
     csrf_token: str = Form(...),
     db: Session = Depends(get_db),
@@ -999,6 +1087,12 @@ def add_run_as_moderator(
         clean_video_url = video_url.strip()
         errors.append(str(exc))
 
+    try:
+        clean_splits_url = validate_optional_url(splits_url, "Splits URL")
+    except ValueError as exc:
+        clean_splits_url = splits_url.strip()
+        errors.append(str(exc))
+
     if len(clean_notes) > 2000:
         errors.append("Notes must be 2,000 characters or fewer.")
 
@@ -1018,6 +1112,7 @@ def add_run_as_moderator(
                     "category_id": category_id,
                     "run_time": run_time,
                     "video_url": video_url,
+                    "splits_url": splits_url,
                     "notes": notes,
                 },
                 errors=errors,
@@ -1038,6 +1133,7 @@ def add_run_as_moderator(
         category_id=category_id,
         time_ms=time_ms,
         video_url=clean_video_url,
+        splits_url=clean_splits_url,
         notes=clean_notes,
         status="approved",
         reviewed_at=utcnow(),
@@ -1233,6 +1329,26 @@ def remove_mod(
     flash(request, f"Moderator access removed from {user.display_name}.", "success")
     return RedirectResponse("/owner/mods", status_code=status.HTTP_303_SEE_OTHER)
 
+@app.get("/{build_slug}", response_class=HTMLResponse)
+def build_page(build_slug: str, request: Request, db: Session = Depends(get_db)):
+    """Redirect a build to its first category leaderboard.
+
+    Defined last so specific single-segment routes like /about, /submit,
+    and /me match first.
+    """
+    if not any(build["slug"] == build_slug for build in BUILD_SEED):
+        raise HTTPException(status_code=404, detail="Build not found.")
+    first = db.scalar(
+        select(Category)
+        .where(Category.build_slug == build_slug)
+        .order_by(Category.display_order, Category.id)
+    )
+    if first is None:
+        raise HTTPException(status_code=404, detail="Build has no categories yet.")
+    return RedirectResponse(
+        f"/{build_slug}/{first.slug}", status_code=status.HTTP_302_FOUND
+    )
+
 @app.get("/{build_slug}/{category_slug}", response_class=HTMLResponse)
 def category_page(
     build_slug: str,
@@ -1259,11 +1375,16 @@ def category_page(
             seen_users.add(run.user_id)
             places[run.id] = len(seen_users)
 
+    build_categories = build_categories_for(db, category.build_slug)
+
     return render_template(
         "category.html",
         template_context(
             request, db, category=category, runs=runs,
             places=places, show_obsolete=show_obsolete,
+            build_categories=build_categories,
+            latest_runs=latest_runs_for(db, build_categories),
+            moderators=list_moderators(db),
         ),
     )
 

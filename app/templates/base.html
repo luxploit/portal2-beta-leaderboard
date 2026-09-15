@@ -47,5 +47,59 @@
 		{% endif %}
 		{% block content %}{% endblock %}
 	</main>
+	<script>
+		(function () {
+			var popover = document.createElement('div');
+			popover.className = 'popover';
+			popover.setAttribute('role', 'tooltip');
+			popover.hidden = true;
+			document.body.appendChild(popover);
+
+			var current = null;
+
+			function show(element) {
+				popover.textContent = element.getAttribute('data-tip');
+				popover.hidden = false;
+				popover.style.visibility = 'hidden';
+				popover.style.left = '0px';
+				popover.style.top = '0px';
+				var width = popover.offsetWidth;
+				var height = popover.offsetHeight;
+				var rect = element.getBoundingClientRect();
+				var x = rect.left + rect.width / 2 - width / 2;
+				x = Math.min(Math.max(8, x), window.innerWidth - width - 8);
+				var y = rect.top - height - 8;
+				if (y < 8) y = rect.bottom + 8;
+				popover.style.left = x + 'px';
+				popover.style.top = y + 'px';
+				popover.style.visibility = '';
+				current = element;
+			}
+
+			function hide() {
+				popover.hidden = true;
+				current = null;
+			}
+
+			document.addEventListener('mouseover', function (event) {
+				var element = event.target.closest ? event.target.closest('[data-tip]') : null;
+				if (element) {
+					if (element !== current) show(element);
+				} else {
+					hide();
+				}
+			});
+			document.addEventListener('mouseout', function (event) {
+				if (current && event.relatedTarget && !current.contains(event.relatedTarget)) hide();
+			});
+			document.addEventListener('focusin', function (event) {
+				var element = event.target.closest ? event.target.closest('[data-tip]') : null;
+				if (element) show(element);
+				else hide();
+			});
+			document.addEventListener('focusout', hide);
+			document.addEventListener('scroll', hide, true);
+		})();
+	</script>
 </body>
 </html>
