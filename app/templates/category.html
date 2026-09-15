@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ category.name }} · {{ category.build_name }} · {{ app_name }}{% endblock %}
+{% block title %}{{ category.name }} &bullet; {{ category.build_name }} &bullet; {{ app_name }}{% endblock %}
 {% block social_meta %}<meta property="og:title" content="{{ self.title()|striptags|forceescape }}">{% endblock %}
 {% block content %}
 	<div class="title-row">

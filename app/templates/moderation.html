@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}Moderation · {{ app_name }}{% endblock %}
+{% block title %}Moderation &bullet; {{ app_name }}{% endblock %}
 {% block content %}
 	<div class="title-row">
 		<h1>Moderation</h1>
@@ -12,7 +12,7 @@
 				<div class="review-main">
 					<div>
 						<h2>{{ run.time_ms|runtime }}</h2>
-						<p><a href="/runs/{{ run.id }}">#{{ run.id }}</a> · {{ run.category.build_name }} · {{ run.category.name }} · <a href="/users/{{ run.runner.discord_id }}">{{ run.runner.display_name }}</a></p>
+						<p><a href="/runs/{{ run.id }}">#{{ run.id }}</a> &bullet; {{ run.category.build_name }} &bullet; {{ run.category.name }} &bullet; <a href="/users/{{ run.runner.discord_id }}">{{ run.runner.display_name }}</a></p>
 					</div>
 					<a href="{{ run.video_url }}" target="_blank" rel="noopener noreferrer">Video</a>
 				</div>

@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% block title %}{{ profile_user.display_name }} · {{ app_name }}{% endblock %}
+{% block title %}{{ profile_user.display_name }} &bullet; {{ app_name }}{% endblock %}
 {% block page_class %}profile-color-{{ profile_color }}{% endblock %}
 {% block social_meta %}
 	<meta property="og:title" content="{{ self.title()|striptags|forceescape }}">
@@ -29,7 +29,7 @@
 				<tbody>
 					{% for run in runs %}
 						<tr>
-							<td><a href="/{{ run.category.build_slug }}/{{ run.category.slug }}">{{ run.category.build_name }} · {{ run.category.name }}</a></td>
+							<td><a href="/{{ run.category.build_slug }}/{{ run.category.slug }}">{{ run.category.build_name }} &bullet; {{ run.category.name }}</a></td>
 							<td class="time"><a href="/runs/{{ run.id }}">{{ run.time_ms|runtime }}</a></td>
 							{% if own_profile %}<td><span class="status {{ run.status }}">{{ run.status }}</span></td>{% endif %}
 							<td>{{ run.submitted_at.strftime('%Y-%m-%d') }}</td>
