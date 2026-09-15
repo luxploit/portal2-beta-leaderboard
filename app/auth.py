@@ -17,7 +17,7 @@ DISCORD_TOKEN_URL = "https://discord.com/api/oauth2/token"
 DISCORD_ME_URL = "https://discord.com/api/v10/users/@me"
 
 def oauth_ready() -> bool:
-    return bool(settings.discord_client_id and settings.discord_client_secret and settings.owner_discord_id)
+    return bool(settings.discord_client_id and settings.discord_client_secret and settings.owner_discord_ids)
 
 def build_discord_authorize_url(request: Request) -> str:
     if not settings.discord_client_id or not settings.discord_client_secret:

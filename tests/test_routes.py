@@ -589,3 +589,58 @@ def test_moderator_can_add_run_for_placeholder_discord_user():
         assert db.scalar(select(func.count(User.id)).where(User.discord_id == discord_id)) == 1
         db.refresh(run)
         assert run.runner.display_name == "Current Discord Name"
+
+def test_multiple_owner_ids_share_owner_access(monkeypatch):
+    from dataclasses import replace
+
+    from app.config import settings as app_settings
+
+    first_owner_id = "777777777777777771"
+    second_owner_id = "777777777777777772"
+    regular_id = "777777777777777773"
+    monkeypatch.setattr(
+        main_module,
+        "settings",
+        replace(app_settings, owner_discord_ids=(first_owner_id, second_owner_id)),
+    )
+
+    csrf_token = "multi-owner-csrf"
+    with TestClient(app) as client:
+        with SessionLocal() as db:
+            db.add_all([
+                User(discord_id=first_owner_id, username="First Owner"),
+                User(discord_id=second_owner_id, username="Second Owner"),
+                User(discord_id=regular_id, username="Regular"),
+            ])
+            db.commit()
+            user_ids = {
+                user.discord_id: user.id
+                for user in db.scalars(
+                    select(User).where(
+                        User.discord_id.in_([first_owner_id, second_owner_id, regular_id])
+                    )
+                )
+            }
+
+        for discord_id, expected_status in [
+            (first_owner_id, 200),
+            (second_owner_id, 200),
+            (regular_id, 403),
+        ]:
+            session_data = base64.b64encode(
+                json.dumps({"user_id": user_ids[discord_id], "csrf_token": csrf_token}).encode()
+            )
+            session_cookie = TimestampSigner("route-test-secret").sign(session_data).decode()
+            client.cookies.set("p2runs_session", session_cookie)
+            response = client.get("/owner/audit-log")
+            assert response.status_code == expected_status
+            client.cookies.clear()
+
+        with SessionLocal() as db:
+            for user in db.scalars(
+                select(User).where(
+                    User.discord_id.in_([first_owner_id, second_owner_id, regular_id])
+                )
+            ):
+                db.delete(user)
+            db.commit()

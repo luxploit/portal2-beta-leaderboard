@@ -196,7 +196,7 @@ def get_current_user(request: Request, db: Session) -> User | None:
     return db.get(User, int(user_id))
 
 def is_owner(user: User | None) -> bool:
-    return bool(user and settings.owner_discord_id and user.discord_id == settings.owner_discord_id)
+    return bool(user and user.discord_id in settings.owner_discord_ids)
 
 def is_moderator(user: User | None) -> bool:
     return bool(user and (user.is_moderator or is_owner(user)))
@@ -336,7 +336,7 @@ def home(request: Request, db: Session = Depends(get_db)):
 def about_page(request: Request, db: Session = Depends(get_db)):
     moderators = db.scalars(
         select(User).where(
-            User.is_moderator.is_(True) | (User.discord_id == settings.owner_discord_id)
+            User.is_moderator.is_(True) | (User.discord_id.in_(settings.owner_discord_ids))
         ).order_by(User.username.asc())
     ).all()
 
@@ -1196,7 +1196,7 @@ def add_mod(
     if not discord_id.isdigit() or not 15 <= len(discord_id) <= 25:
         raise HTTPException(status_code=422, detail="Enter a valid numeric Discord user ID.")
 
-    if discord_id == settings.owner_discord_id:
+    if discord_id in settings.owner_discord_ids:
         flash(request, "The owner already has moderator access.", "info")
         return RedirectResponse("/owner/mods", status_code=status.HTTP_303_SEE_OTHER)
 
@@ -1225,7 +1225,7 @@ def remove_mod(
     user = db.get(User, user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="User not found.")
-    if user.discord_id == settings.owner_discord_id:
+    if user.discord_id in settings.owner_discord_ids:
         raise HTTPException(status_code=400, detail="The owner cannot be demoted.")
     user.is_moderator = False
     db.commit()
