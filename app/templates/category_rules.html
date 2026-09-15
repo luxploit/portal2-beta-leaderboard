@@ -4,7 +4,7 @@
 {% block content %}
 <div class="title-row">
   <div><p class="eyebrow">{{ category.build_name }}</p><h1>{{ category.display_name }} rules</h1></div>
-  <a href="/category/{{ category.slug }}">Back to leaderboard</a>
+  <a href="/{{ category.build_slug }}/{{ category.slug }}">Back to leaderboard</a>
 </div>
 <article class="rules-content">{{ rules_html }}</article>
 {% endblock %}

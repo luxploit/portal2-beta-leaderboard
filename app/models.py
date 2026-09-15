@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
-from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text
+from sqlalchemy import CheckConstraint, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .database import Base
@@ -52,9 +52,11 @@ class UserProfile(Base):
 
 class Category(Base):
     __tablename__ = "categories"
+    __table_args__ = (UniqueConstraint("build_slug", "slug"),)
 
     id: Mapped[int] = mapped_column(primary_key=True)
-    slug: Mapped[str] = mapped_column(String(80), unique=True, index=True)
+    slug: Mapped[str] = mapped_column(String(80), unique=None, index=True)
+    legacy_slug: Mapped[str] = mapped_column(String(80), default="", index=True)
     name: Mapped[str] = mapped_column(String(120), unique=True)
     short_name: Mapped[str] = mapped_column(String(120), default="")
     description: Mapped[str] = mapped_column(String(240), default="")
@@ -69,6 +71,15 @@ class Category(Base):
     @property
     def display_name(self) -> str:
         return self.short_name or self.name
+
+    @property
+    def effective_legacy_slug(self) -> str:
+        """Old `/category/{slug}` value. Falls back to `{build_slug}_{slug}`."""
+        if self.legacy_slug:
+            return self.legacy_slug
+        if self.build_slug:
+            return f"{self.build_slug}_{self.slug}"
+        return self.slug
 
 class Run(Base):
     __tablename__ = "runs"

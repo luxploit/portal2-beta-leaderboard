@@ -54,63 +54,88 @@ PROFILE_COLOR_VALUES = {color["value"] for color in PROFILE_COLORS}
 
 BUILD_SEED = [
     {
-        "slug": "july-2009-852-0",
+        "slug": "july09",
         "name": "July 2009",
         "version": "852_0",
         "categories": [
             {
-                "slug": "2009-no-major-exploits",
+                "slug": "nme",
                 "name": "No Major Exploits",
                 "description": "",
-                "rules_file": "rules/july-2009-852-0/no-major-exploits.md",
+                "rules_file": "rules/july09/nme.md",
+                "legacy_slug": "2009-no-major-exploits",
             },
             {
-                "slug": "2009-oob-sla",
-                "name": "OoB SLA",
+                "slug": "oob-sla",
+                "name": "Out-of-Bounds (SLA)",
                 "description": "",
-                "rules_file": "rules/july-2009-852-0/oob-sla.md",
+                "rules_file": "rules/july09/oob-sla.md",
+                "legacy_slug": "2009-oob-sla",
             },
             {
-                "slug": "2009-in-bounds-no-sla",
-                "name": "Inbounds No SLA",
+                "slug": "inbounds",
+                "name": "Inbounds (No SLA)",
                 "description": "",
-                "rules_file": "rules/july-2009-852-0/in-bounds-no-sla.md",
+                "rules_file": "rules/july09/inbounds.md",
+                "legacy_slug": "2009-in-bounds-no-sla",
             },
         ],
     },
     # {
-    #     "slug": "february-2010-841-0",
+    #     "slug": "feb10",
     #     "name": "February 2010",
     #     "version": "841_0",
     #     "categories": [
     #         {
-    #             "slug": "2010-no-major-exploits",
+    #             "slug": "nme",
     #             "name": "No Major Exploits",
     #             "description": "",
-    #             "rules_file": "rules/february-2010-841-0/no-major-exploits.md",
+    #             "rules_file": "rules/feb10/no-major-exploits.md",
     #         },
     #         {
-    #             "slug": "2010-oob-sla",
-    #             "name": "OOB SLA",
+    #             "slug": "oob-sla",
+    #             "name": "Out-of-Bounds (SLA)",
     #             "description": "",
-    #             "rules_file": "rules/february-2010-841-0/oob-sla.md",
+    #             "rules_file": "rules/feb10/oob-sla.md",
     #         },
     #         {
-    #             "slug": "2010-in-bounds-no-sla",
-    #             "name": "In Bounds No SLA",
+    #             "slug": "inbounds",
+    #             "name": "Inbounds (No SLA)",
     #             "description": "",
-    #             "rules_file": "rules/february-2010-841-0/in-bounds-no-sla.md",
+    #             "rules_file": "rules/feb10/inbounds.md",
     #         },
     #     ],
     # },
 ]
+
+def find_category_by_legacy_slug(db: Session, legacy_slug: str) -> Category | None:
+    """Resolve an old `/category/{slug}` value to a category.
+
+    Matches an explicit ``legacy_slug`` first, then falls back to the
+    ``{build_slug}_{slug}`` convention used when ``legacy_slug`` is empty.
+    """
+    category = db.scalar(select(Category).where(Category.legacy_slug == legacy_slug))
+    if category is not None:
+        return category
+    for candidate in db.scalars(select(Category)).all():
+        if not candidate.legacy_slug and candidate.effective_legacy_slug == legacy_slug:
+            return candidate
+    return None
+
 
 def seed_categories() -> None:
     with SessionLocal() as db:
         for build_order, build in enumerate(BUILD_SEED, start=1):
             build_label = f'{build["name"]} {build["version"]}'
             for category_order, seed in enumerate(build["categories"], start=1):
-                category = db.scalar(select(Category).where(Category.slug == seed["slug"]))
+                category = db.scalar(select(Category).where(Category.build_slug == build["slug"], Category.slug == seed["slug"]))
+                if category is None and seed.get("legacy_slug"):
+                    # Migrate rows created before the /{build}/{category} URLs.
+                    category = db.scalar(select(Category).where(Category.slug == seed["legacy_slug"]))
+                    if category is None:
+                        category = db.scalar(
+                            select(Category).where(Category.legacy_slug == seed["legacy_slug"])
+                        )
                 if category is None:
                     category = Category(slug=seed["slug"])
                     db.add(category)
@@ -122,11 +147,20 @@ def seed_categories() -> None:
                 category.build_name = build_label
                 category.build_order = build_order
                 category.rules_file = seed["rules_file"]
+                if seed.get("legacy_slug"):
+                    category.legacy_slug = seed["legacy_slug"]
         db.commit()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     Base.metadata.create_all(engine)
+    # Lightweight migration for pre-existing SQLite DBs created before
+    # Category.legacy_slug existed (create_all doesn't add columns).
+    if engine.url.get_backend_name() == "sqlite":
+        with engine.begin() as connection:
+            columns = [row[1] for row in connection.exec_driver_sql("PRAGMA table_info(categories)").all()]
+            if "legacy_slug" not in columns:
+                connection.exec_driver_sql("ALTER TABLE categories ADD COLUMN legacy_slug VARCHAR(80) DEFAULT ''")
     seed_categories()
     yield
 
@@ -325,51 +359,36 @@ def about_page(request: Request, db: Session = Depends(get_db)):
     )
 
 @app.get("/category/{slug}", response_class=HTMLResponse)
-def category_page(
-    slug: str, request: Request, show_obsolete: bool = False, db: Session = Depends(get_db)
-):
-    category = db.scalar(select(Category).where(Category.slug == slug))
+def category_legacy_redirect(slug: str, request: Request, db: Session = Depends(get_db)):
+    """Redirect old `/category/{slug}` URLs to `/{build}/{category}`."""
+    category = find_category_by_legacy_slug(db, slug)
+    if category is None:
+        # Also accept the current slug when the build is unambiguous, so very
+        # old links like `/category/nme` keep working if possible.
+        matches = db.scalars(select(Category).where(Category.slug == slug)).all()
+        if len(matches) == 1:
+            category = matches[0]
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found.")
-    
-    runs = best_approved_runs(db, category.id, show_obsolete=show_obsolete)
-    places = {}
-    seen_users = set()
-    
-    for run in runs:
-        if run.user_id not in seen_users:
-            seen_users.add(run.user_id)
-            places[run.id] = len(seen_users)
-            
-    return render_template(
-        "category.html",
-        template_context(
-            request, db, category=category, runs=runs,
-            places=places, show_obsolete=show_obsolete,
-        ),
-    )
+    destination = f"/{category.build_slug}/{category.slug}"
+    if request.query_params:
+        destination += f"?{request.query_params}"
+    return RedirectResponse(destination, status_code=status.HTTP_301_MOVED_PERMANENTLY)
+
 
 @app.get("/category/{slug}/rules", response_class=HTMLResponse)
-def category_rules(slug: str, request: Request, db: Session = Depends(get_db)):
-    category = db.scalar(select(Category).where(Category.slug == slug))
+def category_legacy_rules_redirect(slug: str, request: Request, db: Session = Depends(get_db)):
+    category = find_category_by_legacy_slug(db, slug)
+    if category is None:
+        matches = db.scalars(select(Category).where(Category.slug == slug)).all()
+        if len(matches) == 1:
+            category = matches[0]
     if category is None:
         raise HTTPException(status_code=404, detail="Category not found.")
-
-    rules_path = (BASE_DIR.parent / category.rules_file).resolve()
-    rules_root = RULES_DIR.resolve()
-    if rules_root not in rules_path.parents or not rules_path.is_file():
-        raise HTTPException(status_code=404, detail="Rules not found.")
-
-    rules_html = Markup(
-        markdown.markdown(
-            rules_path.read_text(encoding="utf-8"),
-            extensions=["extra", "sane_lists"],
-        )
-    )
-    return render_template(
-        "category_rules.html",
-        template_context(request, db, category=category, rules_html=rules_html),
-    )
+    destination = f"/{category.build_slug}/{category.slug}/rules"
+    if request.query_params:
+        destination += f"?{request.query_params}"
+    return RedirectResponse(destination, status_code=status.HTTP_301_MOVED_PERMANENTLY)
 
 @app.get("/auth/login")
 def login(request: Request):
@@ -719,7 +738,6 @@ def delete_run(
         raise HTTPException(status_code=404, detail="Run not found.")
 
     deleted_run_id = run.id
-    category_slug = run.category.slug
     audit_run_event(
         db,
         "deleted",
@@ -731,7 +749,7 @@ def delete_run(
     db.commit()
 
     flash(request, f"Run #{deleted_run_id} deleted.", "success")
-    destination = "/moderation" if return_to == "moderation" else f"/category/{category_slug}"
+    destination = "/moderation" if return_to == "moderation" else f"/{run.category.build_slug}/{run.category.slug}"
     return RedirectResponse(destination, status_code=status.HTTP_303_SEE_OTHER)
 
 @app.get("/moderation", response_class=HTMLResponse)
@@ -1223,6 +1241,69 @@ def remove_mod(
     
     flash(request, f"Moderator access removed from {user.display_name}.", "success")
     return RedirectResponse("/owner/mods", status_code=status.HTTP_303_SEE_OTHER)
+
+@app.get("/{build_slug}/{category_slug}", response_class=HTMLResponse)
+def category_page(
+    build_slug: str,
+    category_slug: str,
+    request: Request,
+    show_obsolete: bool = False,
+    db: Session = Depends(get_db),
+):
+    # Defined last so specific routes like /users/{id} and /runs/{id} match first.
+    category = db.scalar(
+        select(Category).where(
+            Category.build_slug == build_slug, Category.slug == category_slug
+        )
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found.")
+
+    runs = best_approved_runs(db, category.id, show_obsolete=show_obsolete)
+    places = {}
+    seen_users = set()
+
+    for run in runs:
+        if run.user_id not in seen_users:
+            seen_users.add(run.user_id)
+            places[run.id] = len(seen_users)
+
+    return render_template(
+        "category.html",
+        template_context(
+            request, db, category=category, runs=runs,
+            places=places, show_obsolete=show_obsolete,
+        ),
+    )
+
+@app.get("/{build_slug}/{category_slug}/rules", response_class=HTMLResponse)
+def category_rules(
+    build_slug: str, category_slug: str, request: Request, db: Session = Depends(get_db)
+):
+    category = db.scalar(
+        select(Category).where(
+            Category.build_slug == build_slug, Category.slug == category_slug
+        )
+    )
+    if category is None:
+        raise HTTPException(status_code=404, detail="Category not found.")
+
+    rules_path = (BASE_DIR.parent / category.rules_file).resolve()
+    rules_root = RULES_DIR.resolve()
+    if rules_root not in rules_path.parents or not rules_path.is_file():
+        raise HTTPException(status_code=404, detail="Rules not found.")
+
+    rules_html = Markup(
+        markdown.markdown(
+            rules_path.read_text(encoding="utf-8"),
+            extensions=["extra", "sane_lists"],
+        )
+    )
+    return render_template(
+        "category_rules.html",
+        template_context(request, db, category=category, rules_html=rules_html),
+    )
+
 
 @app.exception_handler(HTTPException)
 def http_exception_handler(request: Request, exc: HTTPException):

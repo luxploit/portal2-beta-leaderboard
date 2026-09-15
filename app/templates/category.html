@@ -5,12 +5,12 @@
 <div class="title-row">
   <div><p class="eyebrow">{{ category.build_name }}</p><h1>{{ category.display_name }}</h1></div>
   <div class="category-actions">
-    <form method="get" action="/category/{{ category.slug }}">
+    <form method="get" action="/{{ category.build_slug }}/{{ category.slug }}">
       <button class="obsolete-toggle" type="submit" name="show_obsolete" value="{{ 'false' if show_obsolete else 'true' }}" aria-pressed="{{ 'true' if show_obsolete else 'false' }}" aria-label="Show obsoleted runs" title="{{ 'Hide' if show_obsolete else 'Show' }} obsoleted runs">
         <span class="history-icon" aria-hidden="true"></span>
       </button>
     </form>
-    <a href="/category/{{ category.slug }}/rules">Category rules</a>
+    <a href="/{{ category.build_slug }}/{{ category.slug }}/rules">Category rules</a>
   </div>
 </div>
 {% if runs %}

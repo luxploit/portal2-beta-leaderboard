@@ -8,7 +8,7 @@
     <h2>{{ build.label }}</h2>
     <nav class="category-list" aria-label="{{ build.label }} categories">
       {% for category in build.categories %}
-        <a href="/category/{{ category.slug }}">{{ category.display_name }}</a>
+        <a href="/{{ build.slug }}/{{ category.slug }}">{{ category.display_name }}</a>
       {% endfor %}
     </nav>
   </section>
