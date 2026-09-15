@@ -1,47 +1,47 @@
 <!doctype html>
 <html lang="en" class="{% block page_class %}{% endblock %}">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>{% block title %}{{ app_name }}{% endblock %}</title>
-  {% block social_meta %}{% endblock %}
-  <link href="https://fonts.cdnfonts.com/css/d-din" rel="stylesheet">
-  <link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v={{ css_version }}">
-  {% block head %}{% endblock %}
+	<meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1">
+	<title>{% block title %}{{ app_name }}{% endblock %}</title>
+	{% block social_meta %}{% endblock %}
+	<link href="https://fonts.cdnfonts.com/css/d-din" rel="stylesheet">
+	<link rel="stylesheet" href="{{ url_for('static', path='styles.css') }}?v={{ css_version }}">
+	{% block head %}{% endblock %}
 </head>
 <body>
-  <header class="site-header">
-    <div class="wrap nav-wrap">
-      <a class="brand" href="/">{{ app_name }}</a>
-      <nav aria-label="Primary">
-        <a href="/about">About</a>
-        {% if current_user %}
-          <a href="/submit">Submit</a>
-          {% if is_moderator %}<a href="/moderation">Moderation</a>{% endif %}
-          {% if is_owner %}<a href="/owner/audit-log">Audit log</a><a href="/owner/mods">Mods</a>{% endif %}
-          <a class="user-link" href="/users/{{ current_user.discord_id }}" title="My profile">
-            <img class="user-avatar" src="{{ current_user_avatar_url }}" alt="" width="24" height="24">
-            <span>{{ current_user.display_name }}</span>
-          </a>
-          <form class="inline-form" method="post" action="/auth/logout">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button class="link-button" type="submit">Log out</button>
-          </form>
-        {% else %}
-          {% if oauth_ready %}<a href="/auth/login">Sign in</a>{% endif %}
-        {% endif %}
-      </nav>
-    </div>
-  </header>
+	<header class="site-header">
+		<div class="wrap nav-wrap">
+			<a class="brand" href="/">{{ app_name }}</a>
+			<nav aria-label="Primary">
+				<a href="/about">About</a>
+				{% if current_user %}
+					<a href="/submit">Submit</a>
+					{% if is_moderator %}<a href="/moderation">Moderation</a>{% endif %}
+					{% if is_owner %}<a href="/owner/audit-log">Audit log</a><a href="/owner/mods">Mods</a>{% endif %}
+					<a class="user-link" href="/users/{{ current_user.discord_id }}" title="My profile">
+						<img class="user-avatar" src="{{ current_user_avatar_url }}" alt="" width="24" height="24">
+						<span>{{ current_user.display_name }}</span>
+					</a>
+					<form class="inline-form" method="post" action="/auth/logout">
+						<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+						<button class="link-button" type="submit">Log out</button>
+					</form>
+				{% else %}
+					{% if oauth_ready %}<a href="/auth/login">Sign in</a>{% endif %}
+				{% endif %}
+			</nav>
+		</div>
+	</header>
 
-  <main class="wrap">
-    {% if not oauth_ready %}
-      <div class="notice warning">Discord OAuth is not configured.</div>
-    {% endif %}
-    {% if flash %}
-      <div class="notice {{ flash.kind }}">{{ flash.message }}</div>
-    {% endif %}
-    {% block content %}{% endblock %}
-  </main>
+	<main class="wrap">
+		{% if not oauth_ready %}
+			<div class="notice warning">Discord OAuth is not configured.</div>
+		{% endif %}
+		{% if flash %}
+			<div class="notice {{ flash.kind }}">{{ flash.message }}</div>
+		{% endif %}
+		{% block content %}{% endblock %}
+	</main>
 </body>
 </html>

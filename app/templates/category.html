@@ -2,35 +2,35 @@
 {% block title %}{{ category.display_name }} · {{ category.build_name }} · {{ app_name }}{% endblock %}
 {% block social_meta %}<meta property="og:title" content="{{ self.title()|striptags|forceescape }}">{% endblock %}
 {% block content %}
-<div class="title-row">
-  <div><p class="eyebrow">{{ category.build_name }}</p><h1>{{ category.display_name }}</h1></div>
-  <div class="category-actions">
-    <form method="get" action="/{{ category.build_slug }}/{{ category.slug }}">
-      <button class="obsolete-toggle" type="submit" name="show_obsolete" value="{{ 'false' if show_obsolete else 'true' }}" aria-pressed="{{ 'true' if show_obsolete else 'false' }}" aria-label="Show obsoleted runs" title="{{ 'Hide' if show_obsolete else 'Show' }} obsoleted runs">
-        <span class="history-icon" aria-hidden="true"></span>
-      </button>
-    </form>
-    <a href="/{{ category.build_slug }}/{{ category.slug }}/rules">Category rules</a>
-  </div>
-</div>
-{% if runs %}
-<div class="table-wrap">
-  <table class="leaderboard-table">
-    <thead><tr><th>Place</th><th>Runner</th><th>Time</th><th>Submitted</th><th>Proof</th></tr></thead>
-    <tbody>
-    {% for run in runs %}
-      <tr>
-        <td>{% if run.id in places %}{{ places[run.id]|ordinal }}{% else %}<span class="history-icon muted" role="img" aria-label="Obsoleted run" title="Obsoleted run"></span>{% endif %}</td>
-        <td><a href="/users/{{ run.runner.discord_id }}">{{ run.runner.display_name }}</a></td>
-        <td class="time"><a href="/runs/{{ run.id }}">{{ run.time_ms|runtime }}</a></td>
-        <td>{{ run.submitted_at.strftime('%Y-%m-%d') }}</td>
-        <td><a href="{{ run.video_url }}" target="_blank" rel="noopener noreferrer">Video</a></td>
-      </tr>
-    {% endfor %}
-    </tbody>
-  </table>
-</div>
-{% else %}
-  <p class="empty">No runs yet.</p>
-{% endif %}
+	<div class="title-row">
+		<div><p class="eyebrow">{{ category.build_name }}</p><h1>{{ category.display_name }}</h1></div>
+		<div class="category-actions">
+			<form method="get" action="/{{ category.build_slug }}/{{ category.slug }}">
+				<button class="obsolete-toggle" type="submit" name="show_obsolete" value="{{ 'false' if show_obsolete else 'true' }}" aria-pressed="{{ 'true' if show_obsolete else 'false' }}" aria-label="Show obsoleted runs" title="{{ 'Hide' if show_obsolete else 'Show' }} obsoleted runs">
+					<span class="history-icon" aria-hidden="true"></span>
+				</button>
+			</form>
+			<a href="/{{ category.build_slug }}/{{ category.slug }}/rules">Category rules</a>
+		</div>
+	</div>
+	{% if runs %}
+		<div class="table-wrap">
+			<table class="leaderboard-table">
+				<thead><tr><th>Place</th><th>Runner</th><th>Time</th><th>Submitted</th><th>Proof</th></tr></thead>
+				<tbody>
+					{% for run in runs %}
+						<tr>
+							<td>{% if run.id in places %}{{ places[run.id]|ordinal }}{% else %}<span class="history-icon muted" role="img" aria-label="Obsoleted run" title="Obsoleted run"></span>{% endif %}</td>
+							<td><a href="/users/{{ run.runner.discord_id }}">{{ run.runner.display_name }}</a></td>
+							<td class="time"><a href="/runs/{{ run.id }}">{{ run.time_ms|runtime }}</a></td>
+							<td>{{ run.submitted_at.strftime('%Y-%m-%d') }}</td>
+							<td><a href="{{ run.video_url }}" target="_blank" rel="noopener noreferrer">Video</a></td>
+						</tr>
+					{% endfor %}
+				</tbody>
+			</table>
+		</div>
+	{% else %}
+		<p class="empty">No runs yet.</p>
+	{% endif %}
 {% endblock %}

@@ -2,30 +2,30 @@
 {% block title %}Run #{{ run.id }} · {{ app_name }}{% endblock %}
 {% block social_meta %}{% if run.status == 'approved' %}<meta property="og:title" content="{{ self.title()|striptags|forceescape }}">{% endif %}{% endblock %}
 {% block content %}
-<div class="run-title">
-  <div>
-    <h1>{{ run.time_ms|runtime }}</h1>
-  </div>
-  <span class="status {{ run.status }}">{{ run.status }}</span>
-</div>
-<dl class="details">
-  <div><dt>Build</dt><dd>{{ run.category.build_name }}</dd></div>
-  <div><dt>Category</dt><dd><a href="/{{ run.category.build_slug }}/{{ run.category.slug }}">{{ run.category.display_name }}</a></dd></div>
-  <div><dt>Runner</dt><dd><a href="/users/{{ run.runner.discord_id }}">{{ run.runner.display_name }}</a></dd></div>
-  <div><dt>Submitted</dt><dd>{{ run.submitted_at.strftime('%Y-%m-%d %H:%M UTC') }}</dd></div>
-  {% if run.reviewed_at %}<div><dt>Reviewed</dt><dd>{{ run.reviewed_at.strftime('%Y-%m-%d %H:%M UTC') }}{% if run.reviewed_by %} by {{ run.reviewed_by.display_name }}{% endif %}</dd></div>{% endif %}
-</dl>
-<p><a href="{{ run.video_url }}" target="_blank" rel="noopener noreferrer">Proof video</a></p>
-{% if run.notes %}<div class="notes"><h2>Notes</h2><p>{{ run.notes }}</p></div>{% endif %}
-{% if run.status == 'rejected' %}<p class="error-text">{{ run.rejection_reason }}</p>{% endif %}
-{% if is_moderator %}
-<div class="run-admin-actions">
-  <a href="/moderation/runs/{{ run.id }}/edit">Edit run</a>
-  <form method="post" action="/runs/{{ run.id }}/delete" onsubmit="return confirm('Delete this run permanently?');">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <input type="hidden" name="return_to" value="category">
-    <button class="danger" type="submit">Delete run</button>
-  </form>
-</div>
-{% endif %}
+	<div class="run-title">
+		<div>
+			<h1>{{ run.time_ms|runtime }}</h1>
+		</div>
+		<span class="status {{ run.status }}">{{ run.status }}</span>
+	</div>
+	<dl class="details">
+		<div><dt>Build</dt><dd>{{ run.category.build_name }}</dd></div>
+		<div><dt>Category</dt><dd><a href="/{{ run.category.build_slug }}/{{ run.category.slug }}">{{ run.category.display_name }}</a></dd></div>
+		<div><dt>Runner</dt><dd><a href="/users/{{ run.runner.discord_id }}">{{ run.runner.display_name }}</a></dd></div>
+		<div><dt>Submitted</dt><dd>{{ run.submitted_at.strftime('%Y-%m-%d %H:%M UTC') }}</dd></div>
+		{% if run.reviewed_at %}<div><dt>Reviewed</dt><dd>{{ run.reviewed_at.strftime('%Y-%m-%d %H:%M UTC') }}{% if run.reviewed_by %} by {{ run.reviewed_by.display_name }}{% endif %}</dd></div>{% endif %}
+	</dl>
+	<p><a href="{{ run.video_url }}" target="_blank" rel="noopener noreferrer">Proof video</a></p>
+	{% if run.notes %}<div class="notes"><h2>Notes</h2><p>{{ run.notes }}</p></div>{% endif %}
+	{% if run.status == 'rejected' %}<p class="error-text">{{ run.rejection_reason }}</p>{% endif %}
+	{% if is_moderator %}
+		<div class="run-admin-actions">
+			<a href="/moderation/runs/{{ run.id }}/edit">Edit run</a>
+			<form method="post" action="/runs/{{ run.id }}/delete" onsubmit="return confirm('Delete this run permanently?');">
+				<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+				<input type="hidden" name="return_to" value="category">
+				<button class="danger" type="submit">Delete run</button>
+			</form>
+		</div>
+	{% endif %}
 {% endblock %}
