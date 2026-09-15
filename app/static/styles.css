@@ -122,8 +122,9 @@ nav a,
 .moderator-list {
 	list-style: none;
 	padding: 0;
-	display: grid;
-	gap: 12px;
+	/* display: grid; */
+	display: flex;
+	gap: 16px;
 }
 
 .about-logo {
