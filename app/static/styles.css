@@ -134,6 +134,15 @@ nav a,
 	margin-bottom: 24px;
 }
 
+.discord {
+	margin-bottom: 24px;
+}
+
+.discord img {
+	margin-left: 4px;
+	border-radius: 9999px;
+}
+
 .profile-color-slate {
 	background: #141519;
 }
