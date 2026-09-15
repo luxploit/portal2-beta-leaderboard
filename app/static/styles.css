@@ -70,6 +70,13 @@ textarea {
 	text-decoration: none;
 }
 
+.inline-brand {
+	display: flex;
+	flex-direction: row;
+	gap: 8px;
+	align-items: center;
+}
+
 nav {
 	display: flex;
 	align-items: center;
