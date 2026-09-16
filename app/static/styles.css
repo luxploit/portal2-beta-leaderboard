@@ -1001,7 +1001,7 @@ textarea {
 }
 
 .runner-cell > a {
-	flex: 1 1 auto;
+	flex: 0 1 auto;
 	min-width: 0;
 	overflow: hidden;
 	text-overflow: ellipsis;
@@ -1018,10 +1018,6 @@ textarea {
 	gap: 6px;
 	margin-left: 8px;
 	vertical-align: middle;
-}
-
-tr[data-href] {
-	cursor: pointer;
 }
 
 tr[data-href]:hover td {

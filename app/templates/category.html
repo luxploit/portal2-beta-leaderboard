@@ -31,7 +31,7 @@
 						<thead><tr><th>Place</th><th>Runner</th><th>Time</th><th>Date</th><th>Proof</th></tr></thead>
 						<tbody>
 							{% for run in runs %}
-								<tr data-href="/runs/{{ run.id }}" tabindex="0">
+								<tr data-href="/runs/{{ run.id }}">
 									<td>
 										{% if run.id in places %}
 											{{ places[run.id]|ordinal }}
@@ -118,6 +118,8 @@
 	</div>
 	<script>
 		document.querySelectorAll('tr[data-href]').forEach(function (row) {
+			row.tabIndex = 0;
+			row.style.cursor = 'pointer';
 			row.addEventListener('click', function (event) {
 				if (event.target.closest('a, button')) return;
 				window.location.href = row.dataset.href;
