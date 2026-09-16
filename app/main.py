@@ -100,7 +100,7 @@ BUILD_SEED = [
     #             "slug": "nme",
     #             "name": "No Major Exploits",
     #             "description": "",
-    #             "rules_file": "rules/feb10/no-major-exploits.md",
+    #             "rules_file": "rules/feb10/nme.md",
     #         },
     #         {
     #             "slug": "oob-sla",
