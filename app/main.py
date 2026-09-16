@@ -27,7 +27,8 @@ from .auth import (
     verify_oauth_state,
 )
 from .config import settings
-from .database import Base, SessionLocal, engine, get_db
+from .database import SessionLocal, engine, get_db
+from .migrate import require_current_schema
 from .models import AuditLog, Category, Run, User, UserProfile, utcnow
 from .notifications import notify_moderation
 from .bio import render_bio
@@ -137,13 +138,6 @@ def seed_categories() -> None:
         for build_order, build in enumerate(BUILD_SEED, start=1):
             for category_order, seed in enumerate(build["categories"], start=1):
                 category = db.scalar(select(Category).where(Category.build_slug == build["slug"], Category.slug == seed["slug"]))
-                if category is None and seed.get("legacy_slug"):
-                    # Migrate rows created before the /{build}/{category} URLs.
-                    category = db.scalar(select(Category).where(Category.slug == seed["legacy_slug"]))
-                    if category is None:
-                        category = db.scalar(
-                            select(Category).where(Category.legacy_slug == seed["legacy_slug"])
-                        )
                 if category is None:
                     category = Category(slug=seed["slug"])
                     db.add(category)
@@ -161,7 +155,7 @@ def seed_categories() -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    Base.metadata.create_all(engine)
+    require_current_schema(engine)
     seed_categories()
     yield
 
