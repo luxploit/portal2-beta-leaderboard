@@ -18,6 +18,7 @@ html {
 	font-family: 'D-DIN', 'Bahnschrift', 'Arial Narrow', Arial, sans-serif;
 	background: var(--bg);
 	color: var(--text);
+	scrollbar-gutter: stable;
 }
 
 body {

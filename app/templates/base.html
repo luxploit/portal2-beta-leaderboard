@@ -57,6 +57,10 @@
 
 			var current = null;
 
+			document.querySelectorAll('[data-tip]').forEach(function (element) {
+				if (!element.hasAttribute('tabindex') && !/^(A|BUTTON|INPUT|SELECT|TEXTAREA)$/.test(element.tagName)) element.tabIndex = 0;
+			});
+
 			function show(element) {
 				popover.textContent = element.getAttribute('data-tip');
 				popover.hidden = false;

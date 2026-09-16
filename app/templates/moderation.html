@@ -25,7 +25,7 @@
 					</form>
 					<form class="reject-form" method="post" action="/moderation/{{ run.id }}/reject">
 						<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-						<input name="rejection_reason" maxlength="500" placeholder="Reason (optional)">
+						<input name="rejection_reason" maxlength="500" placeholder="Reason (optional)" aria-label="Rejection reason">
 						<button class="danger" type="submit">Reject</button>
 					</form>
 					<form method="post" action="/runs/{{ run.id }}/delete" onsubmit="return confirm('Delete this run permanently?');">
