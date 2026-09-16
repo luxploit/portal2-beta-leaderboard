@@ -61,7 +61,7 @@
 		{% if run.notes %}<div class="notes run-notes-block"><h2>Notes</h2><p>{{ run.notes }}</p></div>{% endif %}
 		<div class="cards">
 			<div class="card"><span class="card-label">Runner</span><span><a href="/users/{{ run.runner.discord_id }}">{{ run.runner.display_name }}</a></span></div>
-			<div class="card"><span class="card-label">Submitted</span><span>{{ run.submitted_at.strftime('%Y-%m-%d %H:%M UTC') }} <span class="muted">({{ run.submitted_at|timeago }})</span></span></div>
+			<div class="card"><span class="card-label">Submitted</span><span>{{ run.submitted_at.strftime('%Y-%m-%d %H:%M UTC') }}<br><span class="muted">({{ run.submitted_at|timeago }})</span></span></div>
 			<div class="card"><span class="card-label">Rank</span><span>{{ rank_label }}</span></div>
 			<div class="card"><span class="card-label">Time</span><span class="time">{{ run.time_ms|runtime }}</span></div>
 			<div class="card"><span class="card-label">Verified by</span><span>{% if run.reviewed_by %}<a href="/users/{{ run.reviewed_by.discord_id }}">{{ run.reviewed_by.display_name }}</a>{% else %}—{% endif %}</span></div>

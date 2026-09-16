@@ -124,6 +124,7 @@ nav a,
 	padding: 0;
 	/* display: grid; */
 	display: flex;
+	flex-wrap: wrap;
 	gap: 16px;
 }
 
@@ -571,6 +572,11 @@ tbody tr:last-child td {
 
 .time {
 	font-weight: 700;
+	white-space: nowrap;
+}
+
+.leaderboard-table .date {
+	white-space: nowrap;
 }
 
 .mono {
@@ -888,6 +894,11 @@ textarea {
 		margin-left: 0;
 	}
 
+	th,
+	td {
+		padding: 8px 6px;
+	}
+
 	.color-options {
 		grid-template-columns: repeat(2, minmax(0, 1fr));
 	}
@@ -989,6 +1000,14 @@ textarea {
 	gap: 12px;
 }
 
+.runner-cell > a {
+	flex: 1 1 auto;
+	min-width: 0;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	white-space: nowrap;
+}
+
 .runner-cell .flags {
 	margin-left: 0;
 	flex: 0 0 auto;
@@ -1036,7 +1055,7 @@ tr[data-href]:focus-visible {
 
 @media (max-width: 900px) {
 	.build-layout {
-		grid-template-columns: 1fr;
+		grid-template-columns: minmax(0, 1fr);
 	}
 }
 
@@ -1096,6 +1115,8 @@ tr[data-href]:focus-visible {
 	display: grid;
 	gap: 4px;
 	align-content: start;
+	min-width: 0;
+	overflow-wrap: anywhere;
 }
 
 .card-label {

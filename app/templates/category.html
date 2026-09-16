@@ -39,7 +39,8 @@
 											<span class="history-icon muted" role="img" aria-label="Obsoleted run" title="Obsoleted run"></span>
 										{% endif %}
 									</td>
-									<td class="runner-cell">
+								<td>
+									<div class="runner-cell">
 										<a href="/users/{{ run.runner.discord_id }}">{{ run.runner.display_name }}</a>
 										{% if run.splits_url or not run.video_url or run.notes %}
 											<span class="flags">
@@ -54,15 +55,16 @@
 													</span>
 												{% endif %}
 												{% if run.notes %}
-													<span role="img" aria-label="This run has notes" data-tip="{{ run.notes }}">
+													<span class="muted" role="img" aria-label="This run has notes" data-tip="{{ run.notes }}">
 														<span class="icon icon-notes" aria-hidden="true"></span>
 													</span>
 												{% endif %}
 											</span>
 										{% endif %}
-									</td>
-									<td class="time"><a href="/runs/{{ run.id }}">{{ run.time_ms|runtime }}</a></td>
-									<td><span data-tip="{{ run.submitted_at.strftime('%Y-%m-%d %H:%M UTC') }}">{{ run.submitted_at|timeago }}</span></td>
+									</div>
+								</td>
+								<td class="time"><a href="/runs/{{ run.id }}">{{ run.time_ms|runtime }}</a></td>
+								<td class="date"><span data-tip="{{ run.submitted_at.strftime('%Y-%m-%d %H:%M UTC') }}">{{ run.submitted_at|timeago }}</span></td>
 									<td>
 										{% if run.video_url %}
 											<a class="icon-link" href="{{ run.video_url }}" target="_blank" rel="noopener noreferrer" data-tip="Watch proof video" aria-label="Watch proof video">
