@@ -131,7 +131,7 @@ def test_category_can_show_obsoleted_runs_without_changing_places():
             rows = re.findall(r"<tr[^>]*>(.*?)</tr>", response.text, re.S)
             for run_id, place in [(ids[0], "1st"), (ids[3], "2nd")]:
                 row = next(row for row in rows if f'href="/runs/{run_id}"' in row)
-                assert f"<td>{place}</td>" in row
+                assert re.search(rf"<td>\s*{place}\s*</td>", row)
             assert response.text.count('aria-label="Obsoleted run"') == (2 if checked else 0)
 
 def test_empty_category_keeps_obsoleted_runs_option():
