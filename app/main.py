@@ -1214,7 +1214,7 @@ def owner_mods(request: Request, db: Session = Depends(get_db)):
     users = db.scalars(select(User).order_by(User.is_moderator.desc(), User.username.asc())).all()
     return render_template(
         "owner_mods.html",
-        template_context(request, db, users=users),
+        template_context(request, db, users=users, owner_discord_ids=settings.owner_discord_ids),
     )
 
 @app.get("/owner/audit-log", response_class=HTMLResponse)

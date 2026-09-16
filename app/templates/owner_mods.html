@@ -14,13 +14,14 @@
 			<thead><tr><th>User</th><th>Discord ID</th><th>Access</th><th></th></tr></thead>
 			<tbody>
 				{% for user in users %}
-					{% if user.is_moderator or user.discord_id == current_user.discord_id %}
+					{% set user_is_owner = user.discord_id in owner_discord_ids %}
+					{% if user.is_moderator or user_is_owner %}
 					<tr>
 						<td>{{ user.display_name }}</td>
 						<td class="mono">{{ user.discord_id }}</td>
-						<td>{% if user.discord_id == current_user.discord_id %}Owner{% else %}Moderator{% endif %}</td>
+						<td>{% if user_is_owner %}Owner{% else %}Moderator{% endif %}</td>
 						<td class="right">
-							{% if user.discord_id != current_user.discord_id %}
+							{% if not user_is_owner %}
 								<form method="post" action="/owner/mods/{{ user.id }}/remove">
 									<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 									<button class="danger" type="submit">Remove</button>

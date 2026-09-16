@@ -599,6 +599,7 @@ def test_multiple_owner_ids_share_owner_access(monkeypatch):
     first_owner_id = "777777777777777771"
     second_owner_id = "777777777777777772"
     regular_id = "777777777777777773"
+    moderator_id = "777777777777777774"
     monkeypatch.setattr(
         main_module,
         "settings",
@@ -609,16 +610,17 @@ def test_multiple_owner_ids_share_owner_access(monkeypatch):
     with TestClient(app) as client:
         with SessionLocal() as db:
             db.add_all([
-                User(discord_id=first_owner_id, username="First Owner"),
+                User(discord_id=first_owner_id, username="First Owner", is_moderator=True),
                 User(discord_id=second_owner_id, username="Second Owner"),
                 User(discord_id=regular_id, username="Regular"),
+                User(discord_id=moderator_id, username="Regular Moderator", is_moderator=True),
             ])
             db.commit()
             user_ids = {
                 user.discord_id: user.id
                 for user in db.scalars(
                     select(User).where(
-                        User.discord_id.in_([first_owner_id, second_owner_id, regular_id])
+                        User.discord_id.in_([first_owner_id, second_owner_id, regular_id, moderator_id])
                     )
                 )
             }
@@ -627,6 +629,7 @@ def test_multiple_owner_ids_share_owner_access(monkeypatch):
             (first_owner_id, 200),
             (second_owner_id, 200),
             (regular_id, 403),
+            (moderator_id, 403),
         ]:
             session_data = base64.b64encode(
                 json.dumps({"user_id": user_ids[discord_id], "csrf_token": csrf_token}).encode()
@@ -635,12 +638,24 @@ def test_multiple_owner_ids_share_owner_access(monkeypatch):
             client.cookies.set("p2runs_session", session_cookie)
             response = client.get("/owner/audit-log")
             assert response.status_code == expected_status
+            response = client.get("/owner/mods")
+            assert response.status_code == expected_status
+            if expected_status == 200:
+                rows = re.findall(r"<tr[^>]*>(.*?)</tr>", response.text, re.S)
+                for owner_id in (first_owner_id, second_owner_id):
+                    row = next(row for row in rows if owner_id in row)
+                    assert "<td>Owner</td>" in row
+                    assert "/remove" not in row
+                moderator_row = next(row for row in rows if moderator_id in row)
+                assert "<td>Moderator</td>" in moderator_row
+                assert f'/owner/mods/{user_ids[moderator_id]}/remove' in moderator_row
+                assert regular_id not in response.text
             client.cookies.clear()
 
         with SessionLocal() as db:
             for user in db.scalars(
                 select(User).where(
-                    User.discord_id.in_([first_owner_id, second_owner_id, regular_id])
+                    User.discord_id.in_([first_owner_id, second_owner_id, regular_id, moderator_id])
                 )
             ):
                 db.delete(user)
